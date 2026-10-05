@@ -33,7 +33,7 @@ async function hashText(v){const b=await crypto.subtle.digest('SHA-256',new Text
 async function sendEmail(env,to,subject,html){
   if(!env.RESEND_API_KEY||!env.EMAIL_FROM)return {sent:false,reason:'Email provider not configured'};
   const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html})});
-  if(!r.ok)return {sent:false,reason:`Email HTTP ${r.status}`};
+  if(!r.ok){let detail='';try{const x=await r.json();detail=x.message||x.name||''}catch{}return {sent:false,reason:`Email HTTP ${r.status}${detail?': '+detail:''}`};}
   return {sent:true};
 }
 async function makeDownloadLinks(env,db,orderId,itemId,origin){
@@ -92,6 +92,13 @@ export default{async fetch(req,env){
   }
 
   if(!isAdmin(req,env))return json({error:'Unauthorized'},401);
+
+  if(u.pathname==='/api/admin/test-email'&&req.method==='POST'){
+    const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({error:'Invalid email'},400);
+    const mail=await sendEmail(env,email,'اختبار البريد الإلكتروني - ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>✅ البريد الإلكتروني يعمل</h2><p>تم إرسال هذه الرسالة من Cloudflare Worker الخاص بمتجر <b>ورشة تك</b> باستخدام Resend.</p><p>إذا وصلت هذه الرسالة، فإن إعدادات <b>RESEND_API_KEY</b> و <b>EMAIL_FROM</b> صحيحة.</p></div>`);
+    if(!mail.sent)return json({error:mail.reason||'Email failed'},502);
+    return json({ok:true,message:'Test email sent'});
+  }
 
   if(u.pathname==='/api/orders/mark-paid'&&req.method==='POST'){
     const b=await req.json(),id=String(b.order_id||'');const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();if(!order)return json({error:'Order not found'},404);await env.DB.prepare("UPDATE orders SET payment_status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP WHERE id=?").bind(String(b.payment_reference||'manual'),id).run();const mail=await sendPurchaseEmail(env,env.DB,id,origin);return json({ok:true,email_sent:mail.sent,email_reason:mail.reason||null});
