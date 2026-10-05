@@ -1,27 +1,40 @@
 (()=>{
   const $q=s=>document.querySelector(s);
-  function availableItems(){
-    const all=[...(typeof products!=='undefined'?products:[]),...(typeof courses!=='undefined'?courses:[])];
-    return all.filter(x=>x&&x.active!==false&&!['sold','coming'].includes(x.status));
-  }
-  function renderOptions(){
+  async function loadTestOrderItems(){
     const sel=$q('#testOrderItem');
+    const status=$q('#testOrderStatus');
     if(!sel)return;
-    const current=sel.value;
-    const all=availableItems();
-    sel.innerHTML='<option value="">اختر منتجاً</option>'+all.map(x=>{
-      const files=Array.isArray(x.files)?x.files:[];
-      const note=files.length?'':' — بدون ملف مرفوع';
-      return `<option value="${String(x.id).replace(/"/g,'&quot;')}">${x.title}${note}</option>`;
-    }).join('');
-    if(all.some(x=>x.id===current))sel.value=current;
+    try{
+      sel.disabled=true;
+      sel.innerHTML='<option value="">جاري تحميل المنتجات...</option>';
+      const r=await fetch((settings?.apiBase||'https://warshatik-store2.hussainfiras23.workers.dev/api').replace(/\/$/,'')+'/catalog');
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+      const all=[...(d.products||[]),...(d.courses||[])].filter(x=>x&&x.active!==false&&!['sold','coming'].includes(x.status));
+      sel.innerHTML='<option value="">اختر منتجاً</option>'+all.map(x=>{
+        const files=Array.isArray(x.files)?x.files:[];
+        const note=files.length?'':' — بدون ملف مرفوع';
+        return `<option value="${String(x.id).replace(/"/g,'&quot;')}">${x.title}${note}</option>`;
+      }).join('');
+      if(!all.length){
+        sel.innerHTML='<option value="">لا توجد منتجات متاحة</option>';
+        if(status)status.textContent='لم يتم العثور على منتجات قابلة للشراء في الكتالوج.';
+      }
+    }catch(err){
+      sel.innerHTML='<option value="">تعذر تحميل المنتجات</option>';
+      if(status)status.textContent='❌ تعذر تحميل المنتجات: '+(err?.message||'خطأ غير معروف');
+    }finally{
+      sel.disabled=false;
+    }
   }
+
   async function createPaidTestOrder(){
     const email=$q('#testOrderEmail')?.value.trim();
     const itemId=$q('#testOrderItem')?.value;
     const currency=$q('#testOrderCurrency')?.value||'IQD';
     const status=$q('#testOrderStatus');
     const btn=$q('#createPaidTestOrder');
+    if(!status||!btn)return;
     if(!email){status.textContent='اكتب بريد المشتري أولاً.';return;}
     if(!itemId){status.textContent='اختر منتجاً أو دورة.';return;}
     if(typeof settings==='undefined'||!settings.adminKey){status.textContent='احفظ Admin API Key أولاً.';return;}
@@ -39,13 +52,17 @@
       }
     }catch(err){
       status.textContent='❌ '+(err?.message||'فشل إنشاء طلب الاختبار');
-    }finally{btn.disabled=false;}
+    }finally{
+      btn.disabled=false;
+    }
   }
-  document.addEventListener('DOMContentLoaded',()=>{
+
+  function init(){
     const btn=$q('#createPaidTestOrder');
-    if(btn)btn.addEventListener('click',createPaidTestOrder);
-    renderOptions();
-    let tries=0;
-    const timer=setInterval(()=>{renderOptions();if(availableItems().length||++tries>20)clearInterval(timer)},500);
-  });
+    if(btn)btn.onclick=createPaidTestOrder;
+    loadTestOrderItems();
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
 })();
