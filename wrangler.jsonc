@@ -6,12 +6,19 @@
   "assets": {
     "directory": "./",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/media/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "warshatik-store-db"
+      "database_name": "warshatik-store-db",
+      "database_id": "52444ab9-800c-455a-b4da-8c687183a41e"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "warshatik-media"
     }
   ]
 }
