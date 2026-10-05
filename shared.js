@@ -1,4 +1,5 @@
 let W=window.WARSHA_DATA,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+document.head.insertAdjacentHTML('beforeend',`<style>.product-main-image{width:100%;height:100%;object-fit:cover;display:block}.gallery-photo{width:100%;height:100%;object-fit:contain;background:#f1edf5}.thumb img{width:100%;height:100%;object-fit:cover;border-radius:13px}.thumb.active{outline:2px solid #8055c2;outline-offset:2px}.download-note{margin-top:18px;padding:13px 15px;border-radius:14px;background:#f2ecfa;color:#655570;font-size:13px}</style>`);
 window.catalogReady=(async()=>{try{const r=await fetch('/api/catalog',{cache:'no-store'});if(r.ok){W=window.WARSHA_DATA=await r.json();}}catch(e){console.warn('Using fallback catalog',e)}return W})();
 const currency=()=>localStorage.getItem('warsha-currency')||'IQD';
 function money(i,old=false){const usd=currency()==='USD',n=usd?(old?i.old_price_usd:i.price_usd):(old?i.old_price_iqd:i.price_iqd);if(n==null)return'';return usd?`$${Number(n).toFixed(n%1?2:0)}`:`${Number(n).toLocaleString('en-US')} د.ع`}
