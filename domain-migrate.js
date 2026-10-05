@@ -1,0 +1,1 @@
+(()=>{try{if(typeof settings!=='undefined'&&/workers\.dev/i.test(settings.apiBase||'')){settings.apiBase='https://warshatik.com/api';localStorage.setItem('wt_settings',JSON.stringify(settings));const input=document.querySelector('#apiBase');if(input)input.value=settings.apiBase;}}catch(e){console.warn('API domain migration skipped',e)}})();
