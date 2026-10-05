@@ -12,6 +12,10 @@ const SEED=[
 async function init(db){
   await db.exec(`CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,type TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL,price_iqd REAL NOT NULL,price_usd REAL NOT NULL,old_price_iqd REAL,old_price_usd REAL,status TEXT NOT NULL,status_text TEXT NOT NULL,short TEXT,description TEXT,features TEXT NOT NULL DEFAULT '[]',images TEXT NOT NULL DEFAULT '[]',youtube TEXT,active INTEGER NOT NULL DEFAULT 1,sort_order INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
   try{await db.exec(`ALTER TABLE items ADD COLUMN files TEXT NOT NULL DEFAULT '[]'`)}catch{}
+  await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
   const c=await db.prepare('SELECT COUNT(*) c FROM items').first();
   if(Number(c.c)===0){for(const x of SEED)await db.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`).bind(x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],JSON.stringify(x[12]),JSON.stringify(x[13]),JSON.stringify(x[14]),x[15],x[16],x[17]).run();}
 }
@@ -22,8 +26,31 @@ function row(r){return {...r,statusText:r.status_text,features:safeParse(r.featu
 function isAdmin(req,env){return !!env.ADMIN_KEY&&req.headers.get('x-admin-key')===env.ADMIN_KEY}
 function extFrom(name,type){const m=(name||'').match(/\.([a-zA-Z0-9]{1,8})$/);if(m)return m[1].toLowerCase();const map={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/zip':'zip','application/pdf':'pdf','text/plain':'txt'};return map[type]||'bin'}
 function cleanName(name){return (name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').slice(0,90)}
+function normEmail(v){return String(v||'').trim().toLowerCase()}
+function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
+function randomToken(bytes=32){const a=new Uint8Array(bytes);crypto.getRandomValues(a);return [...a].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function hashText(v){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function sendEmail(env,to,subject,html){
+  if(!env.RESEND_API_KEY||!env.EMAIL_FROM)return {sent:false,reason:'Email provider not configured'};
+  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html})});
+  if(!r.ok)return {sent:false,reason:`Email HTTP ${r.status}`};
+  return {sent:true};
+}
+async function makeDownloadLinks(env,db,orderId,itemId,origin){
+  const item=await db.prepare('SELECT files,title FROM items WHERE id=?').bind(itemId).first();if(!item)return[];
+  const files=safeParse(item.files);const out=[];const now=Date.now(),exp=now+60*60*1000;
+  for(const f of files){if(!f?.key)continue;const raw=randomToken(32),h=await hashText(raw),name=f.name||`${item.title}.zip`;await db.prepare('INSERT INTO download_tokens(token_hash,order_id,item_id,file_key,file_name,expires_at,created_at) VALUES(?,?,?,?,?,?,?)').bind(h,orderId,itemId,f.key,name,exp,now).run();out.push({name,url:`${origin}/api/download/${raw}`,expires_at:exp});}
+  return out;
+}
+async function sendPurchaseEmail(env,db,orderId,origin){
+  const order=await db.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();if(!order||order.payment_status!=='paid')return {sent:false};
+  const {results}=await db.prepare('SELECT * FROM order_items WHERE order_id=?').bind(orderId).all();let blocks='';
+  for(const it of results){const links=await makeDownloadLinks(env,db,orderId,it.item_id,origin);blocks+=`<h3>${it.title}</h3>${links.length?links.map(l=>`<p><a href="${l.url}">تحميل ${l.name}</a> <small>(الرابط صالح لمدة ساعة)</small></p>`).join(''):'<p>سيتم توفير الملف قريباً.</p>'}`;}
+  const recover=`${origin}/recover.html`;
+  return sendEmail(env,order.email,'مشترياتك من ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>شكراً لشرائك من ورشة تك</h2><p>رقم الطلب: <b>${order.id}</b></p>${blocks}<hr><p>حقك في المنتجات لا ينتهي. إذا انتهى رابط التحميل، استخدم صفحة استرجاع المشتريات لإصدار روابط جديدة:</p><p><a href="${recover}">استرجاع مشترياتي</a></p></div>`);
+}
 export default{async fetch(req,env){
-  const u=new URL(req.url);
+  const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
   await init(env.DB);
@@ -35,53 +62,63 @@ export default{async fetch(req,env){
 
   if(u.pathname.startsWith('/media/images/')&&req.method==='GET'){
     if(!env.MEDIA)return new Response('R2 binding missing',{status:503});
-    const key=decodeURIComponent(u.pathname.slice('/media/'.length));
-    const obj=await env.MEDIA.get(key);
-    if(!obj)return new Response('Not found',{status:404});
-    const h=new Headers();obj.writeHttpMetadata(h);h.set('etag',obj.httpEtag);h.set('cache-control','public, max-age=31536000, immutable');
-    return new Response(obj.body,{headers:h});
+    const key=decodeURIComponent(u.pathname.slice('/media/'.length)),obj=await env.MEDIA.get(key);if(!obj)return new Response('Not found',{status:404});
+    const h=new Headers();obj.writeHttpMetadata(h);h.set('etag',obj.httpEtag);h.set('cache-control','public, max-age=31536000, immutable');return new Response(obj.body,{headers:h});
+  }
+
+  if(u.pathname==='/api/orders/create'&&req.method==='POST'){
+    const b=await req.json(),email=normEmail(b.email),currency=String(b.currency||'IQD').toUpperCase();if(!validEmail(email))return json({error:'Invalid email'},400);
+    const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
+    let total=0,selected=[];for(const id of ids){const it=await env.DB.prepare('SELECT id,title,price_iqd,price_usd,status,active FROM items WHERE id=?').bind(id).first();if(!it||!it.active||['sold','coming'].includes(it.status))continue;const price=currency==='USD'?Number(it.price_usd):Number(it.price_iqd);total+=price;selected.push({...it,price});}
+    if(!selected.length)return json({error:'No purchasable items'},400);const orderId='WT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+    await env.DB.prepare('INSERT INTO orders(id,email,currency,total) VALUES(?,?,?,?)').bind(orderId,email,currency,total).run();for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
+    return json({ok:true,order_id:orderId,email,currency,total});
+  }
+
+  if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
+    const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({ok:true});
+    const paid=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE email=? AND payment_status='paid'").bind(email).first();
+    if(Number(paid?.c||0)>0){const code=String(Math.floor(100000+Math.random()*900000)),h=await hashText(code),now=Date.now();await env.DB.prepare('DELETE FROM recovery_codes WHERE email=?').bind(email).run();await env.DB.prepare('INSERT INTO recovery_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,h,now+15*60*1000,now).run();await sendEmail(env,email,'رمز استرجاع مشتريات ورشة تك',`<div dir="rtl"><h2>رمز استرجاع مشترياتك</h2><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>الرمز صالح لمدة 15 دقيقة.</p></div>`);}
+    return json({ok:true,message:'إذا كان البريد مرتبطاً بمشتريات مدفوعة، أرسلنا رمز تحقق.'});
+  }
+
+  if(u.pathname==='/api/recovery/verify'&&req.method==='POST'){
+    const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);const rec=await env.DB.prepare('SELECT * FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();if(!rec)return json({error:'Invalid or expired code'},400);await env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id).run();
+    const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();const items=[];for(const it of results){items.push({order_id:it.order_id,item_id:it.item_id,title:it.title,downloads:await makeDownloadLinks(env,env.DB,it.order_id,it.item_id,origin)});}return json({ok:true,items});
+  }
+
+  if(u.pathname.startsWith('/api/download/')&&req.method==='GET'){
+    if(!env.MEDIA)return new Response('R2 binding missing',{status:503});const raw=decodeURIComponent(u.pathname.split('/').pop()),h=await hashText(raw),now=Date.now();const t=await env.DB.prepare('SELECT * FROM download_tokens WHERE token_hash=? AND expires_at>?').bind(h,now).first();if(!t)return new Response('Download link expired or invalid',{status:403});const paid=await env.DB.prepare("SELECT payment_status FROM orders WHERE id=?").bind(t.order_id).first();if(!paid||paid.payment_status!=='paid')return new Response('Order is not paid',{status:403});const obj=await env.MEDIA.get(t.file_key);if(!obj)return new Response('File not found',{status:404});const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('content-disposition',`attachment; filename="${cleanName(t.file_name)}"`);headers.set('cache-control','private, no-store');return new Response(obj.body,{headers});
   }
 
   if(!isAdmin(req,env))return json({error:'Unauthorized'},401);
 
+  if(u.pathname==='/api/orders/mark-paid'&&req.method==='POST'){
+    const b=await req.json(),id=String(b.order_id||'');const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();if(!order)return json({error:'Order not found'},404);await env.DB.prepare("UPDATE orders SET payment_status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP WHERE id=?").bind(String(b.payment_reference||'manual'),id).run();const mail=await sendPurchaseEmail(env,env.DB,id,origin);return json({ok:true,email_sent:mail.sent,email_reason:mail.reason||null});
+  }
+
+  if(u.pathname==='/api/orders'&&req.method==='GET'){
+    const {results}=await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200').all();return json({orders:results});
+  }
+
   if(u.pathname==='/api/uploads'&&req.method==='POST'){
-    if(!env.MEDIA)return json({error:'R2 binding MEDIA is missing'},503);
-    const kind=req.headers.get('x-file-kind')==='file'?'file':'image';
-    const itemId=(req.headers.get('x-item-id')||'general').replace(/[^a-zA-Z0-9_-]/g,'-');
-    const original=decodeURIComponent(req.headers.get('x-file-name')||'upload.bin');
-    const type=req.headers.get('content-type')||'application/octet-stream';
-    const max=kind==='image'?10*1024*1024:100*1024*1024;
-    const len=Number(req.headers.get('content-length')||0);if(len>max)return json({error:kind==='image'?'Image too large (max 10 MB)':'File too large (max 100 MB)'},413);
-    const ext=extFrom(original,type),key=`${kind==='image'?'images':'files'}/${itemId}/${crypto.randomUUID()}.${ext}`;
-    await env.MEDIA.put(key,req.body,{httpMetadata:{contentType:type,contentDisposition:`${kind==='image'?'inline':'attachment'}; filename="${cleanName(original)}"`},customMetadata:{originalName:original,itemId,kind}});
-    const head=await env.MEDIA.head(key);
-    return json({key,name:original,type,size:head?.size||len,kind,url:kind==='image'?`/media/${key}`:null});
+    if(!env.MEDIA)return json({error:'R2 binding MEDIA is missing'},503);const kind=req.headers.get('x-file-kind')==='file'?'file':'image',itemId=(req.headers.get('x-item-id')||'general').replace(/[^a-zA-Z0-9_-]/g,'-'),original=decodeURIComponent(req.headers.get('x-file-name')||'upload.bin'),type=req.headers.get('content-type')||'application/octet-stream',max=kind==='image'?10*1024*1024:100*1024*1024,len=Number(req.headers.get('content-length')||0);if(len>max)return json({error:kind==='image'?'Image too large (max 10 MB)':'File too large (max 100 MB)'},413);const ext=extFrom(original,type),key=`${kind==='image'?'images':'files'}/${itemId}/${crypto.randomUUID()}.${ext}`;await env.MEDIA.put(key,req.body,{httpMetadata:{contentType:type,contentDisposition:`${kind==='image'?'inline':'attachment'}; filename="${cleanName(original)}"`},customMetadata:{originalName:original,itemId,kind}});const head=await env.MEDIA.head(key);return json({key,name:original,type,size:head?.size||len,kind,url:kind==='image'?`/media/${key}`:null});
   }
 
   if(u.pathname==='/api/uploads'&&req.method==='DELETE'){
-    if(!env.MEDIA)return json({error:'R2 binding MEDIA is missing'},503);
-    const key=u.searchParams.get('key');if(!key)return json({error:'Missing key'},400);
-    await env.MEDIA.delete(key);return json({ok:true});
+    if(!env.MEDIA)return json({error:'R2 binding MEDIA is missing'},503);const key=u.searchParams.get('key');if(!key)return json({error:'Missing key'},400);await env.MEDIA.delete(key);return json({ok:true});
   }
 
   if(u.pathname.startsWith('/api/files/')&&req.method==='GET'){
-    if(!env.MEDIA)return json({error:'R2 binding MEDIA is missing'},503);
-    const key=decodeURIComponent(u.pathname.slice('/api/files/'.length));
-    const obj=await env.MEDIA.get(key);if(!obj)return new Response('Not found',{status:404});
-    const h=new Headers(cors);obj.writeHttpMetadata(h);h.set('etag',obj.httpEtag);return new Response(obj.body,{headers:h});
+    if(!env.MEDIA)return json({error:'R2 binding MEDIA is missing'},503);const key=decodeURIComponent(u.pathname.slice('/api/files/'.length)),obj=await env.MEDIA.get(key);if(!obj)return new Response('Not found',{status:404});const h=new Headers(cors);obj.writeHttpMetadata(h);h.set('etag',obj.httpEtag);return new Response(obj.body,{headers:h});
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';
-    await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.active===false?0:1,x.sort_order||0).run();
-    return json({ok:true});
+    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
-    const id=decodeURIComponent(u.pathname.split('/').pop());
-    const old=await env.DB.prepare('SELECT images,files FROM items WHERE id=?').bind(id).first();
-    if(env.MEDIA&&old){for(const a of [...safeParse(old.images),...safeParse(old.files)])if(a&&a.key)await env.MEDIA.delete(a.key);}
-    await env.DB.prepare('DELETE FROM items WHERE id=?').bind(id).run();return json({ok:true});
+    const id=decodeURIComponent(u.pathname.split('/').pop()),old=await env.DB.prepare('SELECT images,files FROM items WHERE id=?').bind(id).first();if(env.MEDIA&&old){for(const a of [...safeParse(old.images),...safeParse(old.files)])if(a&&a.key)await env.MEDIA.delete(a.key);}await env.DB.prepare('DELETE FROM items WHERE id=?').bind(id).run();return json({ok:true});
   }
   return json({error:'Not found'},404);
 }};
