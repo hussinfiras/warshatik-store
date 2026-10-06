@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 720 500" role="img" aria-label="WarshaTik">
+<defs>
+  <linearGradient id="wtg" x1="297" y1="464" x2="950" y2="288" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#5f22a5"/>
+    <stop offset=".5" stop-color="#7d2bc0"/>
+    <stop offset="1" stop-color="#8d36d2"/>
+  </linearGradient>
+</defs>
+<path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z" fill="url(#wtg)"/>
+<path d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtg)"/>
+</svg>
