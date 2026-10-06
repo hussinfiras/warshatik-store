@@ -24,21 +24,15 @@ header{z-index:60}
 .logo.warsha-logo{width:54px;height:42px;border-radius:0;background:transparent;box-shadow:none;padding:0;overflow:visible;display:grid;place-items:center}
 .logo.warsha-logo svg{width:100%;height:100%;display:block;overflow:visible;filter:drop-shadow(0 6px 10px rgba(128,85,194,.18));transition:transform .22s ease,filter .22s ease}
 .brand:hover .logo.warsha-logo svg{transform:translateY(-1px);filter:drop-shadow(0 8px 13px rgba(128,85,194,.25))}
-.wt-brand-loader{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:rgba(247,247,247,.975);backdrop-filter:blur(8px);opacity:1;visibility:visible;transition:opacity .42s ease,visibility .42s ease}
+.wt-brand-loader{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:rgba(247,247,247,.982);backdrop-filter:blur(7px);opacity:1;visibility:visible;transition:opacity .42s ease,visibility .42s ease}
 .wt-brand-loader.done{opacity:0;visibility:hidden}
-.wt-loader-inner{display:flex;flex-direction:column;align-items:center;gap:8px}
-.wt-loader-mark{width:min(300px,57vw);height:auto;overflow:visible;filter:drop-shadow(0 14px 28px rgba(128,85,194,.13));shape-rendering:geometricPrecision}
-.wt-left-ghost{fill:rgba(128,85,194,.055);stroke:rgba(128,85,194,.09);stroke-width:2}
-.wt-liquid-rise{transform:translate3d(0,285px,0);animation:wtLiquidRise 1.18s cubic-bezier(.22,.75,.22,1) .08s forwards;will-change:transform}
-.wt-wave-sway{animation:wtWaveSway .82s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:center;will-change:transform}
-.wt-tick-guide{opacity:0;stroke-dasharray:1;stroke-dashoffset:1;animation:wtTickDraw .64s cubic-bezier(.18,.78,.2,1) 1.28s forwards;will-change:stroke-dashoffset,opacity}
-.wt-tick-solid{opacity:0;transform:scale(.992);transform-origin:center;transform-box:fill-box;animation:wtSolidIn .24s ease-out 1.82s forwards,wtTickGlow .52s ease 2.0s forwards}
-.wt-loader-name{font:800 15px/1 Inter,Cairo,sans-serif;letter-spacing:1.8px;color:#8055c2;opacity:0;transform:translateY(4px);animation:wtNameIn .32s ease 1.94s forwards}
-@keyframes wtLiquidRise{0%{transform:translate3d(0,285px,0)}100%{transform:translate3d(0,0,0)}}
-@keyframes wtWaveSway{from{transform:translate3d(-10px,0,0)}to{transform:translate3d(10px,0,0)}}
-@keyframes wtTickDraw{0%{opacity:0;stroke-dashoffset:1}8%{opacity:1}100%{opacity:1;stroke-dashoffset:0}}
-@keyframes wtSolidIn{0%{opacity:0;transform:scale(.992)}100%{opacity:1;transform:scale(1)}}
-@keyframes wtTickGlow{0%{filter:drop-shadow(0 0 0 rgba(128,85,194,0))}50%{filter:drop-shadow(0 0 14px rgba(128,85,194,.28))}100%{filter:drop-shadow(0 7px 13px rgba(128,85,194,.16))}}
-@keyframes wtNameIn{to{opacity:.68;transform:none}}
+.wt-loader-inner{display:flex;flex-direction:column;align-items:center;gap:10px}
+.wt-loader-mark{width:min(300px,57vw);height:auto;display:block;overflow:visible;filter:drop-shadow(0 12px 24px rgba(128,85,194,.12));shape-rendering:geometricPrecision}
+.wt-left-ghost{fill:rgba(128,85,194,.045);stroke:rgba(128,85,194,.07);stroke-width:2}
+.wt-tick-solid{opacity:1}
+.wt-loader-name{font:800 15px/1 Inter,Cairo,sans-serif;letter-spacing:1.8px;color:#8055c2;opacity:0;transform:translateY(4px);animation:wtNameIn .3s ease 2.05s forwards}
+.wt-loader-mark{animation:wtLoaderGlow .42s ease 2.08s both}
+@keyframes wtNameIn{to{opacity:.66;transform:none}}
+@keyframes wtLoaderGlow{0%{filter:drop-shadow(0 12px 24px rgba(128,85,194,.12))}50%{filter:drop-shadow(0 10px 24px rgba(128,85,194,.28))}100%{filter:drop-shadow(0 12px 24px rgba(128,85,194,.14))}}
 @media(max-width:600px){.logo.warsha-logo{width:47px;height:38px}.wt-loader-mark{width:min(250px,65vw)}}
-@media(prefers-reduced-motion:reduce){.wt-liquid-rise,.wt-wave-sway,.wt-tick-guide,.wt-tick-solid,.wt-loader-name{animation:none!important}.wt-liquid-rise{transform:none}.wt-tick-guide{display:none}.wt-tick-solid{opacity:1;transform:none}.wt-loader-name{opacity:.68;transform:none}}
+@media(prefers-reduced-motion:reduce){.wt-loader-name,.wt-loader-mark{animation:none!important}.wt-loader-name{opacity:.66;transform:none}}
