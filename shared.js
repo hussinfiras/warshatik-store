@@ -30,21 +30,54 @@ function animatedWarshaMark(){
   return `<svg viewBox="260 250 720 500" class="wt-loader-mark" aria-label="WarshaTik">
   <defs>
     <linearGradient id="wtLoaderGrad" x1="297" y1="705" x2="950" y2="288" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#5f22a5"/><stop offset=".52" stop-color="#8055c2"/><stop offset="1" stop-color="#9637da"/>
+      <stop offset="0" stop-color="#5f22a5"/>
+      <stop offset=".52" stop-color="#8055c2"/>
+      <stop offset="1" stop-color="#9637da"/>
     </linearGradient>
-    <clipPath id="wtLeftClip"><path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/></clipPath>
+
+    <mask id="wtLeftMask" maskUnits="userSpaceOnUse" x="260" y="250" width="330" height="480">
+      <rect x="260" y="705" width="330" height="0" fill="white">
+        <animate attributeName="y" from="705" to="430" dur="1.15s" begin="0.08s" fill="freeze"/>
+        <animate attributeName="height" from="0" to="300" dur="1.15s" begin="0.08s" fill="freeze"/>
+      </rect>
+    </mask>
+
+    <mask id="wtTickMask" maskUnits="userSpaceOnUse" x="490" y="250" width="480" height="500">
+      <path d="M548 438 L635 658 L873 327"
+            fill="none"
+            stroke="white"
+            stroke-width="154"
+            stroke-linecap="square"
+            stroke-linejoin="miter"
+            pathLength="1"
+            stroke-dasharray="1"
+            stroke-dashoffset="1">
+        <animate attributeName="stroke-dashoffset" from="1" to="0" dur=".72s" begin="1.36s" fill="freeze"/>
+      </path>
+    </mask>
+
+    <clipPath id="wtLeftClip">
+      <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/>
+    </clipPath>
   </defs>
+
   <path class="wt-left-ghost" d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/>
-  <g clip-path="url(#wtLeftClip)">
-    <g class="wt-liquid-rise">
-      <rect x="260" y="438" width="330" height="290" fill="url(#wtLoaderGrad)"/>
-      <g class="wt-wave-sway">
-        <path d="M245 451 Q285 435 325 451 T405 451 T485 451 T565 451 T645 451 V485 H245Z" fill="rgba(255,255,255,.16)"/>
-      </g>
-    </g>
+
+  <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"
+        fill="url(#wtLoaderGrad)"
+        mask="url(#wtLeftMask)"/>
+
+  <g clip-path="url(#wtLeftClip)" mask="url(#wtLeftMask)" opacity=".18">
+    <path d="M245 470 Q285 452 325 470 T405 470 T485 470 T565 470 T645 470 V510 H245Z"
+          fill="white">
+      <animateTransform attributeName="transform" type="translate" values="-10 0;10 0;-10 0" dur=".9s" repeatCount="indefinite"/>
+    </path>
   </g>
-  <path class="wt-tick-guide" d="M548 438 L635 658 L873 327" fill="none" stroke="url(#wtLoaderGrad)" stroke-width="126" stroke-linecap="square" stroke-linejoin="miter" pathLength="1"/>
-  <path class="wt-tick-solid" d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtLoaderGrad)"/>
+
+  <path class="wt-tick-solid"
+        d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
+        fill="url(#wtLoaderGrad)"
+        mask="url(#wtTickMask)"/>
   </svg>`;
 }
 function setupWarshaLoader(){
@@ -56,7 +89,7 @@ function setupWarshaLoader(){
   overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}<div class="wt-loader-name">warshaTik</div></div>`;
   document.body.appendChild(overlay);
   const started=performance.now();
-  const hide=()=>{const wait=Math.max(0,2300-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
+  const hide=()=>{const wait=Math.max(0,2500-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
   if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
 }
 window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);return overlay};
