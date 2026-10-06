@@ -31,7 +31,6 @@ header{z-index:60}
 .wt-left-ghost{fill:rgba(128,85,194,.045);stroke:rgba(128,85,194,.07);stroke-width:2}
 .wt-tick-solid{opacity:1}
 .wt-loader-mark{animation:wtLoaderGlow .42s ease 2.08s both}
-}
 @keyframes wtLoaderGlow{0%{filter:drop-shadow(0 12px 24px rgba(128,85,194,.12))}50%{filter:drop-shadow(0 10px 24px rgba(128,85,194,.28))}100%{filter:drop-shadow(0 12px 24px rgba(128,85,194,.14))}}
 @media(max-width:600px){.logo.warsha-logo{width:47px;height:38px}.wt-loader-mark{width:min(250px,65vw)}}
 @media(prefers-reduced-motion:reduce){.wt-loader-mark{animation:none!important}}
