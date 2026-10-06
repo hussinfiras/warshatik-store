@@ -20,7 +20,7 @@ const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 
 <path d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtg)"/>
 </svg>`;
 function applyWarshaLogo(){
-  $('.logo').forEach(el=>{el.classList.add('warsha-logo');el.innerHTML=WARSHA_LOGO_SVG});
+  document.querySelectorAll('.logo').forEach(el=>{el.classList.add('warsha-logo');el.innerHTML=WARSHA_LOGO_SVG});
   if(!document.querySelector('link[data-warsha-favicon]')){
     const l=document.createElement('link');l.rel='icon';l.type='image/svg+xml';l.dataset.warshaFavicon='1';
     l.href='data:image/svg+xml,'+encodeURIComponent(WARSHA_LOGO_SVG);document.head.appendChild(l);
