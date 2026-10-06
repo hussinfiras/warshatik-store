@@ -18,7 +18,24 @@ function addToCart(id){const all=[...(W?.products||[]),...(W?.courses||[])],item
 function removeFromCart(id){saveCart(cartIds().filter(x=>x!==id))}
 function clearCart(){saveCart([])}
 window.addToCart=addToCart;window.removeFromCart=removeFromCart;window.clearCart=clearCart;window.cartIds=cartIds;
-function setup(){const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
+
+function setupAmbientElectronics(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const root=document.documentElement;
+  if(matchMedia('(pointer:fine)').matches){
+    let x=innerWidth/2,y=innerHeight/2,raf=0;
+    const paint=()=>{root.style.setProperty('--fx-x',x+'px');root.style.setProperty('--fx-y',y+'px');raf=0};
+    addEventListener('pointermove',e=>{x=e.clientX;y=e.clientY;if(!raf)raf=requestAnimationFrame(paint)},{passive:true});
+    addEventListener('pointerenter',()=>root.classList.add('fx-active'),{passive:true});
+    addEventListener('pointerleave',()=>root.classList.remove('fx-active'),{passive:true});
+    root.classList.add('fx-active');
+    paint();
+  }else{
+    root.classList.add('fx-mobile');
+  }
+}
+
+function setup(){setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
 function reveal(){const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.1});$$('.reveal:not(.visible)').forEach(x=>o.observe(x))}
 function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong>${money(i)}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
 async function renderListing(type,target){await window.catalogReady;const paint=()=>{const list=(type==='course'?W.courses:W.products).filter(x=>x.active);const el=$(target);if(el)el.innerHTML=list.map(card).join('');reveal()};paint();window.addEventListener('warsha:catalog-updated',paint,{once:true})}
