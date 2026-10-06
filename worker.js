@@ -1,4 +1,5 @@
 const STATUS={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',featured:'مميز',coming:'قريباً'};
+let initPromise=null;
 const SEED=[
 ['rfid-attendance','product','نظام RFID للحضور','Arduino',12000,9,15000,11.5,'new','جديد','كود كامل + مخطط توصيل + قائمة مكتبات + ملف شرح.','مشروع متكامل لبناء نظام حضور باستخدام Arduino وقارئ RFID.',['كود Arduino كامل','مخطط التوصيل','قائمة المكتبات','ملف شرح PDF'],[],[],'https://www.youtube.com/',1,10],
 ['ble-mouse','product','مشروع BLE Mouse','ESP32',15000,11.5,20000,15,'sale','خصم','ESP32 + Joystick للتحكم بالمؤشر لاسلكياً.','مشروع تحكم بالمؤشر عبر Bluetooth باستخدام ESP32 وJoystick.',['كود ESP32','شرح التوصيل','إعداد BLE'],[],[],'https://www.youtube.com/',1,20],
@@ -19,6 +20,7 @@ async function init(db){
   const c=await db.prepare('SELECT COUNT(*) c FROM items').first();
   if(Number(c.c)===0){for(const x of SEED)await db.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`).bind(x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],JSON.stringify(x[12]),JSON.stringify(x[13]),JSON.stringify(x[14]),x[15],x[16],x[17]).run();}
 }
+function ensureInit(db){if(!initPromise)initPromise=init(db).catch(e=>{initPromise=null;throw e});return initPromise}
 const cors={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-admin-key,x-file-name,x-file-kind,x-item-id','access-control-allow-methods':'GET,POST,DELETE,OPTIONS'};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=UTF-8',...cors,...extra}});
 function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fallback}}
@@ -53,11 +55,18 @@ export default{async fetch(req,env){
   const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
-  await init(env.DB);
+  await ensureInit(env.DB);
 
   if(u.pathname==='/api/catalog'&&req.method==='GET'){
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache');
+    if(cache){
+      const hit=await cache.match(cacheKey);
+      if(hit)return hit;
+    }
     const {results}=await env.DB.prepare('SELECT * FROM items ORDER BY sort_order,id').all();
-    return json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row)});
+    const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row)},200,{'cache-control':'public, max-age=30, s-maxage=60, stale-while-revalidate=300'});
+    if(cache)await cache.put(cacheKey,response.clone());
+    return response;
   }
 
   if(u.pathname.startsWith('/media/images/')&&req.method==='GET'){
