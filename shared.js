@@ -17,7 +17,7 @@ const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 
   </linearGradient>
 </defs>
 <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z" fill="url(#wtg)"/>
-<path d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtg)"/>
+<path d="M950 288 790 288 626 529 563 399 482 463 608 708 652 704Z" fill="url(#wtg)"/>
 </svg>`;
 function applyWarshaLogo(){
   document.querySelectorAll('.logo').forEach(el=>{el.classList.add('warsha-logo');el.innerHTML=WARSHA_LOGO_SVG});
@@ -75,7 +75,7 @@ function animatedWarshaMark(){
   </g>
 
   <path class="wt-tick-solid"
-        d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
+        d="M950 288 790 288 626 529 563 399 482 463 608 708 652 704Z"
         fill="url(#wtLoaderGrad)"
         mask="url(#wtTickMask)"/>
   </svg>`;
@@ -86,7 +86,7 @@ function setupWarshaLoader(){
   sessionStorage.setItem('warsha-loader-seen','1');
   const overlay=document.createElement('div');
   overlay.className='wt-brand-loader';
-  overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}<div class="wt-loader-name">warshaTik</div></div>`;
+  overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;
   document.body.appendChild(overlay);
   const started=performance.now();
   const hide=()=>{const wait=Math.max(0,2500-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
