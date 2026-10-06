@@ -33,17 +33,18 @@ function animatedWarshaMark(){
       <stop offset="0" stop-color="#5f22a5"/><stop offset=".52" stop-color="#8055c2"/><stop offset="1" stop-color="#9637da"/>
     </linearGradient>
     <clipPath id="wtLeftClip"><path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/></clipPath>
-    <mask id="wtTickMask" maskUnits="userSpaceOnUse" x="490" y="260" width="500" height="480">
-      <rect x="490" y="260" width="500" height="480" fill="black"/>
-      <path class="wt-tick-draw" d="M544 441 L635 666 L870 337" fill="none" stroke="white" stroke-width="155" stroke-linecap="square" stroke-linejoin="miter"/>
-    </mask>
   </defs>
   <path class="wt-left-ghost" d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/>
   <g clip-path="url(#wtLeftClip)">
-    <rect class="wt-liquid" x="270" y="705" width="300" height="0" fill="url(#wtLoaderGrad)"/>
-    <path class="wt-wave" d="M260 520 Q300 500 340 520 T420 520 T500 520 T580 520 V760 H260Z" fill="rgba(255,255,255,.20)"/>
+    <g class="wt-liquid-rise">
+      <rect x="260" y="438" width="330" height="290" fill="url(#wtLoaderGrad)"/>
+      <g class="wt-wave-sway">
+        <path d="M245 451 Q285 435 325 451 T405 451 T485 451 T565 451 T645 451 V485 H245Z" fill="rgba(255,255,255,.16)"/>
+      </g>
+    </g>
   </g>
-  <path class="wt-tick-final" mask="url(#wtTickMask)" d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtLoaderGrad)"/>
+  <path class="wt-tick-guide" d="M548 438 L635 658 L873 327" fill="none" stroke="url(#wtLoaderGrad)" stroke-width="126" stroke-linecap="square" stroke-linejoin="miter" pathLength="1"/>
+  <path class="wt-tick-solid" d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtLoaderGrad)"/>
   </svg>`;
 }
 function setupWarshaLoader(){
@@ -55,7 +56,7 @@ function setupWarshaLoader(){
   overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}<div class="wt-loader-name">warshaTik</div></div>`;
   document.body.appendChild(overlay);
   const started=performance.now();
-  const hide=()=>{const wait=Math.max(0,1850-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
+  const hide=()=>{const wait=Math.max(0,2300-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
   if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
 }
 window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);return overlay};
