@@ -17,10 +17,10 @@ const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 
   </linearGradient>
 </defs>
 <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z" fill="url(#wtg)"/>
-<path d="M950 288 790 288 626 529 563 399 482 463 608 708 652 704Z" fill="url(#wtg)"/>
+<path d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtg)"/>
 </svg>`;
 function applyWarshaLogo(){
-  document.querySelectorAll('.logo').forEach(el=>{el.classList.add('warsha-logo');el.innerHTML=WARSHA_LOGO_SVG});
+  document.querySelectorAll('.logo').forEach(el=>{el.classList.add('warsha-logo');el.innerHTML=WARSHA_LOGO_SVG});document.querySelectorAll('.brand small').forEach(el=>el.remove());
   if(!document.querySelector('link[data-warsha-favicon]')){
     const l=document.createElement('link');l.rel='icon';l.type='image/svg+xml';l.dataset.warshaFavicon='1';
     l.href='data:image/svg+xml,'+encodeURIComponent(WARSHA_LOGO_SVG);document.head.appendChild(l);
@@ -67,15 +67,8 @@ function animatedWarshaMark(){
         fill="url(#wtLoaderGrad)"
         mask="url(#wtLeftMask)"/>
 
-  <g clip-path="url(#wtLeftClip)" mask="url(#wtLeftMask)" opacity=".18">
-    <path d="M245 470 Q285 452 325 470 T405 470 T485 470 T565 470 T645 470 V510 H245Z"
-          fill="white">
-      <animateTransform attributeName="transform" type="translate" values="-10 0;10 0;-10 0" dur=".9s" repeatCount="indefinite"/>
-    </path>
-  </g>
-
   <path class="wt-tick-solid"
-        d="M950 288 790 288 626 529 563 399 482 463 608 708 652 704Z"
+        d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
         fill="url(#wtLoaderGrad)"
         mask="url(#wtTickMask)"/>
   </svg>`;
