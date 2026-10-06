@@ -7,6 +7,60 @@ const cachedCatalog=readCatalogCache();
 if(cachedCatalog)W=window.WARSHA_DATA=cachedCatalog;
 window.catalogReady=Promise.resolve(W);
 window.catalogRefresh=(async()=>{try{const r=await fetch('/api/catalog',{cache:'default'});if(r.ok){const fresh=await r.json();W=window.WARSHA_DATA=fresh;saveCatalogCache(fresh);window.dispatchEvent(new CustomEvent('warsha:catalog-updated'));return fresh}}catch(e){console.warn('Using cached/fallback catalog',e)}return W})();
+
+const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 720 500" role="img" aria-label="WarshaTik">
+<defs>
+  <linearGradient id="wtg" x1="297" y1="464" x2="950" y2="288" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#5f22a5"/>
+    <stop offset=".5" stop-color="#7d2bc0"/>
+    <stop offset="1" stop-color="#8d36d2"/>
+  </linearGradient>
+</defs>
+<path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z" fill="url(#wtg)"/>
+<path d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtg)"/>
+</svg>`;
+function applyWarshaLogo(){
+  $('.logo').forEach(el=>{el.classList.add('warsha-logo');el.innerHTML=WARSHA_LOGO_SVG});
+  if(!document.querySelector('link[data-warsha-favicon]')){
+    const l=document.createElement('link');l.rel='icon';l.type='image/svg+xml';l.dataset.warshaFavicon='1';
+    l.href='data:image/svg+xml,'+encodeURIComponent(WARSHA_LOGO_SVG);document.head.appendChild(l);
+  }
+}
+function animatedWarshaMark(){
+  return `<svg viewBox="260 250 720 500" class="wt-loader-mark" aria-label="WarshaTik">
+  <defs>
+    <linearGradient id="wtLoaderGrad" x1="297" y1="705" x2="950" y2="288" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5f22a5"/><stop offset=".52" stop-color="#8055c2"/><stop offset="1" stop-color="#9637da"/>
+    </linearGradient>
+    <clipPath id="wtLeftClip"><path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/></clipPath>
+    <mask id="wtTickMask" maskUnits="userSpaceOnUse" x="490" y="260" width="500" height="480">
+      <rect x="490" y="260" width="500" height="480" fill="black"/>
+      <path class="wt-tick-draw" d="M544 441 L635 666 L870 337" fill="none" stroke="white" stroke-width="155" stroke-linecap="square" stroke-linejoin="miter"/>
+    </mask>
+  </defs>
+  <path class="wt-left-ghost" d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/>
+  <g clip-path="url(#wtLeftClip)">
+    <rect class="wt-liquid" x="270" y="705" width="300" height="0" fill="url(#wtLoaderGrad)"/>
+    <path class="wt-wave" d="M260 520 Q300 500 340 520 T420 520 T500 520 T580 520 V760 H260Z" fill="rgba(255,255,255,.20)"/>
+  </g>
+  <path class="wt-tick-final" mask="url(#wtTickMask)" d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtLoaderGrad)"/>
+  </svg>`;
+}
+function setupWarshaLoader(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(sessionStorage.getItem('warsha-loader-seen'))return;
+  sessionStorage.setItem('warsha-loader-seen','1');
+  const overlay=document.createElement('div');
+  overlay.className='wt-brand-loader';
+  overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}<div class="wt-loader-name">warshaTik</div></div>`;
+  document.body.appendChild(overlay);
+  const started=performance.now();
+  const hide=()=>{const wait=Math.max(0,1850-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
+  if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
+}
+window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);return overlay};
+window.hideWarshaLoader=()=>{const overlay=document.querySelector('.wt-brand-loader');if(overlay){overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)}};
+
 const currency=()=>localStorage.getItem('warsha-currency')||'IQD';
 function money(i,old=false){const usd=currency()==='USD',n=usd?(old?i.old_price_usd:i.price_usd):(old?i.old_price_iqd:i.price_iqd);if(n==null)return'';return usd?`$${Number(n).toFixed(n%1?2:0)}`:`${Number(n).toLocaleString('en-US')} د.ع`}
 function statusClass(s){return`flag flag-${s||'normal'}`}
@@ -35,7 +89,7 @@ function setupAmbientElectronics(){
   }
 }
 
-function setup(){setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
+function setup(){applyWarshaLogo();setupWarshaLoader();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
 function reveal(){const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.1});$$('.reveal:not(.visible)').forEach(x=>o.observe(x))}
 function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong>${money(i)}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
 async function renderListing(type,target){await window.catalogReady;const paint=()=>{const list=(type==='course'?W.courses:W.products).filter(x=>x.active);const el=$(target);if(el)el.innerHTML=list.map(card).join('');reveal()};paint();window.addEventListener('warsha:catalog-updated',paint,{once:true})}
