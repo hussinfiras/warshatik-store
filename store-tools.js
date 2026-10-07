@@ -50,6 +50,9 @@ async function loadStoreSettings(){
       if(q('#banner'+i+'Button'))q('#banner'+i+'Button').value=b.button||'';
     }
     if(q('#defaultWarning'))q('#defaultWarning').value=s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.';
+    if(q('#showCourses'))q('#showCourses').checked=s.show_courses!==false;
+    if(q('#showProducts'))q('#showProducts').checked=s.show_products!==false;
+    if(q('#showConsultations'))q('#showConsultations').checked=s.show_consultations!==false;
     if(q('#waylFeePercent'))q('#waylFeePercent').value=s.wayl_fee_percent??'';
     if(q('#waylFixedIQD'))q('#waylFixedIQD').value=s.wayl_fixed_iqd??'';
     if(q('#waylFixedUSD'))q('#waylFixedUSD').value=s.wayl_fixed_usd??'';
@@ -70,6 +73,9 @@ async function saveStoreSettings(extra={}){
       button:q('#banner'+i+'Button')?.value.trim()||''
     })).filter(b=>b.title||b.subtitle||b.image),
     digital_warning_default:q('#defaultWarning')?.value.trim()||'',
+    show_courses:q('#showCourses')?.checked??true,
+    show_products:q('#showProducts')?.checked??true,
+    show_consultations:q('#showConsultations')?.checked??true,
     wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),
     wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),
     wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0),
