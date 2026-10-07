@@ -8,6 +8,7 @@ if(cachedCatalog)W=window.WARSHA_DATA=cachedCatalog;
 window.catalogReady=Promise.resolve(W);
 window.catalogRefresh=(async()=>{try{const r=await fetch('/api/catalog',{cache:'default'});if(r.ok){const fresh=await r.json();W=window.WARSHA_DATA=fresh;saveCatalogCache(fresh);window.dispatchEvent(new CustomEvent('warsha:catalog-updated'));return fresh}}catch(e){console.warn('Using cached/fallback catalog',e)}return W})();
 window.storefrontReady=(async()=>{try{const r=await fetch('/api/storefront',{cache:'default'});if(r.ok)return await r.json()}catch(e){console.warn('Storefront settings unavailable',e)}return {news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}})();
+window.regionReady=(async()=>{try{const r=await fetch('/api/region',{cache:'no-store'});if(r.ok)return await r.json()}catch(e){console.warn('Region detection unavailable',e)}return {country:'XX',is_iraq:false}})();
 
 
 const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 720 500" role="img" aria-label="WarshaTik">
