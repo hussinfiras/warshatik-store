@@ -1,1 +1,1 @@
-Trigger admin deployment for image-size guidance and homepage fallback controls.
+Trigger admin deployment for storefront section visibility controls.
