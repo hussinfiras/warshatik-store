@@ -1,1 +1,1 @@
-Trigger deployment for banner shade and product availability controls.
+Trigger deployment for news toggle fallback hero and image-size guidance.
