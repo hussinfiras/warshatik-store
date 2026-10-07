@@ -2,7 +2,7 @@ const STATUS_TEXT={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let products=[],courses=[],editing=null,currentImages=[],currentFiles=[],dragIndex=null;
 let consultations=JSON.parse(localStorage.getItem('wt_consults')||'null')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
-let settings=JSON.parse(localStorage.getItem('wt_settings')||'null')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik.com/api',adminKey:''};
+let settings=JSON.parse(localStorage.getItem('wt_settings')||'null')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik-store2.hussainfiras23.workers.dev/api',adminKey:''};
 const api=()=>((document.querySelector('#apiBase')?.value||settings.apiBase||'https://warshatik.com/api').trim().replace(/\/$/,''));
 const currentAdminKey=()=>String(document.querySelector('#adminKey')?.value||settings.adminKey||'').trim();
 function badge(s){return'badge '+(s||'normal')}function label(x){return x.statusText||STATUS_TEXT[x.status]||'عادي'}
@@ -10,14 +10,29 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 async function apiCall(path,opt={}){
   const headers={'content-type':'application/json',...(opt.headers||{})};
   const key=currentAdminKey();if(key)headers['x-admin-key']=key;
-  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
-  let r;
-  try{r=await fetch(api()+path,{...opt,headers,signal:ctrl.signal})}
-  catch(e){if(e.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');throw e}
-  finally{clearTimeout(timer)}
-  let data={};try{data=await r.json()}catch{}
-  if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
-  return data
+  const primary=api();
+  const fallback='https://warshatik-store2.hussainfiras23.workers.dev/api';
+  const bases=[primary,...(primary!==fallback?[fallback]:[])];
+  let lastErr=null;
+  for(const base of bases){
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
+    try{
+      const r=await fetch(base+path,{...opt,headers,signal:ctrl.signal});
+      let data={};try{data=await r.json()}catch{}
+      if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+      if(base!==primary){
+        settings.apiBase=base;
+        localStorage.setItem('wt_settings',JSON.stringify(settings));
+        const input=document.querySelector('#apiBase');if(input)input.value=base;
+      }
+      return data;
+    }catch(e){
+      lastErr=e;
+      if(e.message==='Unauthorized'||/^HTTP \d+/.test(e.message))throw e;
+    }finally{clearTimeout(timer)}
+  }
+  if(lastErr?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
+  throw new Error(lastErr?.message||'فشل الاتصال بالخادم');
 }
 async function uploadAsset(file,kind){const key=currentAdminKey();if(!key)throw new Error('تحقق من Admin API Key في الإعدادات');const itemId=editing||'draft';const headers={'content-type':file.type||'application/octet-stream','x-admin-key':key,'x-file-name':encodeURIComponent(file.name),'x-file-kind':kind,'x-item-id':itemId};const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});let data={};try{data=await r.json()}catch{}if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data}
 async function deleteAsset(key){if(!key)return;await apiCall('/uploads?key='+encodeURIComponent(key),{method:'DELETE'})}
