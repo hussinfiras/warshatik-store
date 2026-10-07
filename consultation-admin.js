@@ -30,10 +30,15 @@ q('#generateTicket')?.addEventListener('click',async()=>{
     customer_name:q('#ticketCustomerName')?.value.trim(),
     contact_method:q('#ticketContactMethod')?.value,
     contact_value:q('#ticketContactValue')?.value.trim(),
-    scheduled_date:q('#ticketDate')?.value,
+    scheduled_date:String(q('#ticketDate')?.value||'').trim(),
     consultation_type:q('#ticketType')?.value
   };
-  if(!payload.customer_name||!payload.contact_method||!payload.scheduled_date){alert('أدخل اسم العميل وطريقة التواصل والتاريخ.');return}
+  const formStatus=q('#ticketFormStatus');
+  if(!payload.customer_name){if(formStatus)formStatus.textContent='❌ أدخل اسم العميل.';q('#ticketCustomerName')?.focus();return}
+  if(!payload.contact_method){if(formStatus)formStatus.textContent='❌ اختر طريقة التواصل.';q('#ticketContactMethod')?.focus();return}
+  if(!payload.scheduled_date){if(formStatus)formStatus.textContent='❌ أدخل التاريخ بصيغة YYYY-MM-DD.';q('#ticketDate')?.focus();return}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(payload.scheduled_date)){if(formStatus)formStatus.textContent='❌ صيغة التاريخ يجب أن تكون مثل 2026-10-10.';q('#ticketDate')?.focus();return}
+  if(formStatus)formStatus.textContent='جاري إنشاء التذكرة...';
   btn.disabled=true;
   try{
     const d=await window.adminBridge('create-consultation-ticket',payload),t=d.ticket;
@@ -41,8 +46,9 @@ q('#generateTicket')?.addEventListener('click',async()=>{
     out.innerHTML='<strong>رمز التذكرة:</strong><div class="generated-code">'+t.code+'</div><button type="button" class="mini" id="copyTicketCode">نسخ الرمز</button><p class="hint">أرسل هذا الرمز للعميل. عند إدخاله في صفحة الاستشارات سيتم التحقق من التذكرة.</p>';
     q('#copyTicketCode').onclick=async()=>{await navigator.clipboard.writeText(t.code);if(typeof toast==='function')toast('تم نسخ الرمز')};
     q('#ticketCustomerName').value='';q('#ticketContactValue').value='';
+    if(formStatus)formStatus.textContent='✅ تم إنشاء التذكرة بنجاح.';
     loadTickets();
-  }catch(e){alert(e.message)}
+  }catch(e){if(formStatus)formStatus.textContent='❌ '+e.message;else alert(e.message)}
   finally{btn.disabled=false}
 });
 document.addEventListener('DOMContentLoaded',loadTickets);
