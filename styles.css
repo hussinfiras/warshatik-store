@@ -323,3 +323,18 @@ body[data-page="home"] .quick-card{
   .detail-grid{grid-template-columns:1fr}
   .thumbs{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+
+/* Consultation ticket flow */
+.ticket-modal[hidden]{display:none}
+.ticket-modal{position:fixed;inset:0;z-index:12000;background:rgba(24,19,31,.62);display:grid;place-items:center;padding:20px;backdrop-filter:blur(8px)}
+.ticket-modal-card{position:relative;width:min(520px,100%);background:#fff;border:1px solid var(--border);border-radius:24px;padding:28px;box-shadow:0 26px 70px rgba(35,20,50,.22)}
+.ticket-modal-card h2{margin:8px 0}.ticket-modal-card>p{color:var(--muted)}
+.ticket-modal-card label{display:flex;flex-direction:column;gap:7px;margin:18px 0 10px;font-weight:800}
+.ticket-modal-card input{border:1px solid var(--border);border-radius:13px;padding:13px 15px;font:800 20px/1 Inter,Cairo,sans-serif;letter-spacing:4px;text-align:center}
+.ticket-close{position:absolute;left:16px;top:14px;border:0;background:#f3eef8;width:34px;height:34px;border-radius:50%;font-size:20px;cursor:pointer}
+.ticket-valid,.ticket-error,.ticket-payment-note,.ticket-receipt{margin-top:14px;padding:14px 16px;border-radius:14px}
+.ticket-valid{background:#f7f3fc;border:1px solid #e4d9f1}.ticket-valid>strong{color:#6f3ab2}
+.ticket-error{background:#fff1f2;border:1px solid #f2b8bf;color:#a32936}
+.ticket-payment-note{background:#fff8e8;border:1px solid #f1ca79;color:#735100}
+.ticket-receipt{background:#effaf5;border:1px solid #bfe5d3;color:#176247}
+.ticket-receipt p,.ticket-valid p{margin:6px 0}
