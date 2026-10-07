@@ -9,7 +9,15 @@ async function loadStoreSettings(){
     if(q('#homeSubtitle'))q('#homeSubtitle').value=s.home_subtitle||'دورات عملية، أكواد Arduino وESP32، ملفات مشاريع واستشارات شخصية تساعدك تتعلم وتبني مشروعك بطريقة واضحة.';
     if(q('#homeImage'))q('#homeImage').value=s.home_image||'';
     if(q('#newsEnabled'))q('#newsEnabled').checked=s.news_enabled!==false;
-    if(q('#newsItems'))q('#newsItems').value=(Array.isArray(s.news_items)?s.news_items:[]).join('\n');
+    const banners=Array.isArray(s.home_banners)?s.home_banners:[];
+    for(let i=1;i<=3;i++){
+      const b=banners[i-1]||{};
+      if(q('#banner'+i+'Title'))q('#banner'+i+'Title').value=b.title||'';
+      if(q('#banner'+i+'Subtitle'))q('#banner'+i+'Subtitle').value=b.subtitle||'';
+      if(q('#banner'+i+'Image'))q('#banner'+i+'Image').value=b.image||'';
+      if(q('#banner'+i+'Link'))q('#banner'+i+'Link').value=b.link||'';
+      if(q('#banner'+i+'Button'))q('#banner'+i+'Button').value=b.button||'';
+    }
     if(q('#defaultWarning'))q('#defaultWarning').value=s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.';
     if(q('#waylFeePercent'))q('#waylFeePercent').value=s.wayl_fee_percent??'';
     if(q('#waylFixedIQD'))q('#waylFixedIQD').value=s.wayl_fixed_iqd??'';
@@ -23,7 +31,13 @@ async function saveStoreSettings(extra={}){
     home_subtitle:q('#homeSubtitle')?.value.trim()||undefined,
     home_image:q('#homeImage')?.value.trim()||'',
     news_enabled:q('#newsEnabled')?.checked??true,
-    news_items:(q('#newsItems')?.value||'').split('\n').map(x=>x.trim()).filter(Boolean),
+    home_banners:[1,2,3].map(i=>({
+      title:q('#banner'+i+'Title')?.value.trim()||'',
+      subtitle:q('#banner'+i+'Subtitle')?.value.trim()||'',
+      image:q('#banner'+i+'Image')?.value.trim()||'',
+      link:q('#banner'+i+'Link')?.value.trim()||'',
+      button:q('#banner'+i+'Button')?.value.trim()||''
+    })).filter(b=>b.title||b.subtitle||b.image),
     digital_warning_default:q('#defaultWarning')?.value.trim()||'',
     wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),
     wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),
@@ -60,5 +74,22 @@ q('#homeImageInput')?.addEventListener('change',async e=>{
 });
 q('#saveSettings')?.addEventListener('click',async()=>{try{await saveStoreSettings();toast('تم حفظ إعدادات الرسوم')}catch(e){console.error(e)}});
 ['#waylFeePercent','#waylFixedIQD','#waylFixedUSD'].forEach(id=>q(id)?.addEventListener('input',()=>{window.wtStoreSettings={...(window.wtStoreSettings||{}),wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0)};if(window.updateNetPreview)window.updateNetPreview()}));
+
+async function uploadBannerImage(file,index){
+  if(!file)return;
+  if(file.size>10*1024*1024){alert('الصورة أكبر من 10MB');return}
+  try{
+    const headers={'content-type':file.type||'application/octet-stream','x-admin-key':settings.adminKey,'x-file-name':encodeURIComponent(file.name),'x-file-kind':'image','x-item-id':'home-banner-'+index};
+    const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    const input=q('#banner'+index+'Image');if(input)input.value=d.url||'';
+    toast('تم رفع صورة البنر');
+  }catch(err){alert(err.message)}
+}
+[1,2,3].forEach(i=>q('#banner'+i+'Upload')?.addEventListener('change',async e=>{
+  const file=e.target.files?.[0];e.target.value='';await uploadBannerImage(file,i);
+}));
+
 loadStoreSettings();loadStats();
 })();
