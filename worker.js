@@ -64,6 +64,22 @@ export default{async fetch(req,env){
   const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
+
+  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
+    const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
+    if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
+    try{
+      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
+      if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
+      return json({ok:true,ticket:t});
+    }catch(e){
+      await ensureInit(env.DB);
+      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
+      if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
+      return json({ok:true,ticket:t});
+    }
+  }
+
   await ensureInit(env.DB);
 
   if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
@@ -111,20 +127,13 @@ export default{async fetch(req,env){
     return json({ok:true,order_id:orderId,email,currency,total});
   }
 
-  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
-    const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
-    if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
-    const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
-    if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
-    return json({ok:true,ticket:t});
-  }
-
   if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
     const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
     const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
     if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
     if(t.status==='paid')return json({ok:true,paid:true,ticket:t});
     if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
+    if(t.status==='ended')return json({error:'انتهت الجلسة، حاول مرة أخرى.'},400);
     await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending' WHERE code=? AND status='issued'").bind(code).run();
     return json({ok:true,payment_ready:false,code,amount_iqd:t.amount_iqd,message:'التذكرة جاهزة للدفع. سيتم ربطها ببوابة Wayl في مرحلة تفعيل الدفع النهائية.'});
   }
@@ -180,7 +189,7 @@ export default{async fetch(req,env){
     }
     if(b.action==='set-consultation-ticket-status'){
       const p=b.payload||{},code=String(p.code||''),status=String(p.status||'');
-      const allowed=['issued','payment_pending','paid','completed','cancelled'];
+      const allowed=['issued','payment_pending','paid','completed','ended','cancelled'];
       if(!allowed.includes(status))return json({error:'Invalid status'},400);
       if(status==='paid')await env.DB.prepare("UPDATE consultation_tickets SET status='paid',paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP),payment_reference=COALESCE(?,payment_reference) WHERE code=?").bind(String(p.payment_reference||'ADMIN-MANUAL'),code).run();
       else await env.DB.prepare('UPDATE consultation_tickets SET status=? WHERE code=?').bind(status,code).run();
