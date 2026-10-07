@@ -338,3 +338,7 @@ body[data-page="home"] .quick-card{
 .ticket-payment-note{background:#fff8e8;border:1px solid #f1ca79;color:#735100}
 .ticket-receipt{background:#effaf5;border:1px solid #bfe5d3;color:#176247}
 .ticket-receipt p,.ticket-valid p{margin:6px 0}
+
+.consult-contact-buttons{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
+.consult-contact-buttons .btn{flex:1;min-width:150px}
+.ticket-modal-card textarea{width:100%;min-height:105px;resize:vertical;border:1px solid var(--border);border-radius:13px;padding:12px 14px;font:600 14px/1.8 Cairo,sans-serif;letter-spacing:0;text-align:right}
