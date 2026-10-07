@@ -14,6 +14,8 @@ async function init(db){
   await db.exec(`CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,type TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL,price_iqd REAL NOT NULL,price_usd REAL NOT NULL,old_price_iqd REAL,old_price_usd REAL,status TEXT NOT NULL,status_text TEXT NOT NULL,short TEXT,description TEXT,features TEXT NOT NULL DEFAULT '[]',images TEXT NOT NULL DEFAULT '[]',youtube TEXT,active INTEGER NOT NULL DEFAULT 1,sort_order INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
   try{await db.exec(`ALTER TABLE items ADD COLUMN files TEXT NOT NULL DEFAULT '[]'`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN warning_text TEXT NOT NULL DEFAULT ''`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN digital_only INTEGER NOT NULL DEFAULT 1`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN iraq_only INTEGER NOT NULL DEFAULT 0`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
@@ -26,7 +28,7 @@ function ensureInit(db){if(!initPromise)initPromise=init(db).catch(e=>{initPromi
 const cors={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-admin-key,x-file-name,x-file-kind,x-item-id','access-control-allow-methods':'GET,POST,DELETE,OPTIONS'};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=UTF-8',...cors,...extra}});
 function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fallback}}
-function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
+function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
 async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
 function isAdmin(req,env){return !!env.ADMIN_KEY&&req.headers.get('x-admin-key')===env.ADMIN_KEY}
@@ -60,6 +62,8 @@ export default{async fetch(req,env){
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
   await ensureInit(env.DB);
+
+  if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
 
   if(u.pathname==='/api/storefront'&&req.method==='GET'){
     const s=await getSettings(env.DB);
@@ -95,7 +99,7 @@ export default{async fetch(req,env){
   if(u.pathname==='/api/orders/create'&&req.method==='POST'){
     const b=await req.json(),email=normEmail(b.email),currency=String(b.currency||'IQD').toUpperCase();if(!validEmail(email))return json({error:'Invalid email'},400);
     const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
-    let total=0,selected=[];for(const id of ids){const it=await env.DB.prepare('SELECT id,title,price_iqd,price_usd,status,active FROM items WHERE id=?').bind(id).first();if(!it||!it.active||['sold','coming'].includes(it.status))continue;const price=currency==='USD'?Number(it.price_usd):Number(it.price_iqd);total+=price;selected.push({...it,price});}
+    let total=0,selected=[];for(const id of ids){const it=await env.DB.prepare('SELECT id,title,price_iqd,price_usd,status,active,iraq_only FROM items WHERE id=?').bind(id).first();if(!it||!it.active||['sold','coming'].includes(it.status))continue;if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);const price=currency==='USD'?Number(it.price_usd):Number(it.price_iqd);total+=price;selected.push({...it,price});}
     if(!selected.length)return json({error:'No purchasable items'},400);const orderId='WT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
     await env.DB.prepare('INSERT INTO orders(id,email,currency,total) VALUES(?,?,?,?)').bind(orderId,email,currency,total).run();for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
     return json({ok:true,order_id:orderId,email,currency,total});
@@ -190,7 +194,7 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
+    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
