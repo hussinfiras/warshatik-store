@@ -1,9 +1,40 @@
 (function(){
 const q=s=>document.querySelector(s);
+async function bridge(action,payload){
+  const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
+  if(!key)throw new Error('Admin API Key غير موجود');
+  const bases=[
+    (settings.apiBase||'https://warshatik.com/api').replace(/\/$/,''),
+    'https://warshatik.com/api',
+    'https://warshatik-store2.hussainfiras23.workers.dev/api'
+  ].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  let lastErr=null;
+  for(const base of bases){
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
+    try{
+      const r=await fetch(base+'/admin/bridge',{
+        method:'POST',
+        headers:{'content-type':'text/plain;charset=UTF-8'},
+        body:JSON.stringify({admin_key:key,action,payload}),
+        signal:ctrl.signal
+      });
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+      settings.apiBase=base;settings.adminKey=key;
+      localStorage.setItem('wt_settings',JSON.stringify(settings));
+      if(q('#apiBase'))q('#apiBase').value=base;
+      return d;
+    }catch(e){lastErr=e}
+    finally{clearTimeout(timer)}
+  }
+  if(lastErr?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
+  throw new Error(lastErr?.message||'فشل الاتصال بالخادم');
+}
+
 function setText(id,v){const el=q(id);if(el)el.textContent=v}
 async function loadStoreSettings(){
   try{
-    const d=await apiCall('/admin/settings',{method:'GET'});
+    const d=await bridge('get-settings');
     const s=d.settings||{};window.wtStoreSettings=s;
     if(q('#homeTitle'))q('#homeTitle').value=s.home_title||'حوّل أفكارك الإلكترونية إلى مشاريع حقيقية.';
     if(q('#homeSubtitle'))q('#homeSubtitle').value=s.home_subtitle||'دورات عملية، أكواد Arduino وESP32، ملفات مشاريع واستشارات شخصية تساعدك تتعلم وتبني مشروعك بطريقة واضحة.';
@@ -44,14 +75,14 @@ async function saveStoreSettings(extra={}){
     wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0),
     ...extra
   };
-  const d=await apiCall('/admin/settings',{method:'POST',body:JSON.stringify(payload)});
+  const d=await bridge('save-settings',payload);
   window.wtStoreSettings=d.settings||payload;
   if(window.updateNetPreview)window.updateNetPreview();
   return d;
 }
 async function loadStats(){
   try{
-    const d=await apiCall('/admin/stats',{method:'GET'});
+    const d=await bridge('stats');
     setText('#statPaidOrders',d.paid_orders||0);setText('#statUnitsSold',d.units_sold||0);setText('#statCustomers',d.customers||0);setText('#statPendingOrders',d.pending_orders||0);
     const ri=(d.revenue||[]).find(x=>x.currency==='IQD')?.total||0,ru=(d.revenue||[]).find(x=>x.currency==='USD')?.total||0;
     setText('#statRevenueIQD',Number(ri).toLocaleString('en-US'));setText('#statRevenueUSD','$'+Number(ru).toFixed(2));
