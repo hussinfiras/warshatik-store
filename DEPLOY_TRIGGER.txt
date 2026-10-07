@@ -1,1 +1,1 @@
-Trigger Cloudflare deployment for admin bridge connectivity fix.
+Trigger Cloudflare deployment for homepage banner layout cleanup.
