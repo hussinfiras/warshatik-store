@@ -375,3 +375,11 @@ body[data-page="home"] .quick-card{
   .consult-step span{width:22px;height:22px}
   .consult-step-panel h2{font-size:20px}
 }
+
+/* Cleaner consultation modal without top stepper */
+.consult-stepper{display:none!important}
+.consult-steps-card{padding-top:34px}
+.consult-step-panel h2{font-size:25px;margin-bottom:10px}
+.consult-step-panel>p{font-size:14px;line-height:1.8}
+.consult-step-panel label{margin-top:16px}
+.consult-step-panel textarea{min-height:120px}
