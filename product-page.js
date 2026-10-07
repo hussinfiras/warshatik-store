@@ -1,25 +1,45 @@
 document.addEventListener('DOMContentLoaded',async()=>{
+  const root=document.getElementById('detailRoot');
   try{
-    await window.catalogReady;
-    if(window.catalogRefresh) await window.catalogRefresh;
-    const storefront=window.storefrontReady?await window.storefrontReady:{digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'};
-    const region=window.regionReady?await window.regionReady:{country:'XX',is_iraq:false};
-    const p=new URLSearchParams(location.search),id=p.get('id'),type=p.get('type')||'product';
-    const all=[...(window.WARSHA_DATA?.products||[]),...(window.WARSHA_DATA?.courses||[])];
-    const item=all.find(x=>x.id===id),root=document.getElementById('detailRoot');
-    if(item&&!isItemSectionVisible(item)){location.replace('index.html');return}
+    const [catalogRes,storefront,region]=await Promise.all([
+      fetch('/api/catalog',{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null),
+      window.storefrontReady?window.storefrontReady:Promise.resolve({digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_products:true,show_courses:true}),
+      window.regionReady?window.regionReady:Promise.resolve({country:'XX',is_iraq:false})
+    ]);
+    const data=catalogRes||window.WARSHA_DATA||{products:[],courses:[]};
+    window.WARSHA_DATA=data;
+    const params=new URLSearchParams(location.search);
+    const id=params.get('id');
+    const type=params.get('type')||'product';
+    const all=[...(data.products||[]),...(data.courses||[])];
+    const item=all.find(x=>x.id===id);
+
     if(!item){
       root.innerHTML='<div class="empty-card"><h1>المنتج غير موجود</h1><p>قد يكون الرابط قديماً أو تم إخفاء المنتج.</p><a class="btn btn-primary" href="products.html">الرجوع للمنتجات</a></div>';
       return;
     }
+    if((item.type==='product'&&storefront.show_products===false)||(item.type==='course'&&storefront.show_courses===false)){
+      location.replace('index.html');return;
+    }
+
+    const moneyLocal=(i,old=false)=>{
+      const cur=localStorage.getItem('warsha-currency')||'IQD';
+      const usd=cur==='USD';
+      const n=usd?(old?i.old_price_usd:i.price_usd):(old?i.old_price_iqd:i.price_iqd);
+      if(n==null)return '';
+      return usd?'$'+Number(n).toFixed(Number(n)%1?2:0):Number(n).toLocaleString('en-US')+' د.ع';
+    };
+    const statusClassLocal=s=>'flag flag-'+(s||'normal');
+
     document.title=item.title+' | ورشة تك';
     const blockedByRegion=!!item.iraqOnly&&!region.is_iraq;
     const disabled=['sold','coming'].includes(item.status)||blockedByRegion;
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
+
     root.innerHTML=`<div class="reveal">
       <div class="gallery-main" id="mainGallery">
-        ${item.statusText?`<span class="${statusClass(item.status)}">${item.statusText}</span>`:''}
+        ${item.statusText?`<span class="${statusClassLocal(item.status)}">${item.statusText}</span>`:''}
         ${main?`<img class="gallery-photo" id="mainProductImage" src="${main}" alt="${item.title}">`:`<div class="big-chip">${String(item.category||'').toUpperCase()}</div>`}
       </div>
       ${imgs.length?`<div class="thumbs">${imgs.map((x,i)=>`<button class="thumb ${i===0?'active':''}" type="button" data-image="${x.url}"><img src="${x.url}" alt="${x.name||item.title}"></button>`).join('')}</div>`:''}
@@ -29,9 +49,9 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <span class="category">${item.category||''}</span>
       <h1>${item.title}</h1>
       <p class="desc">${item.description||''}</p>
-      <div class="detail-price">${item.old_price_iqd?`<small class="old-price">${money(item,true)}</small>`:''}${money(item)}</div>
+      <div class="detail-price">${item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${moneyLocal(item)}</div>
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
-      ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default}</span></div>`:''}
+      ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
       ${(item.files||[]).length?`<div class="download-note">يتضمن هذا المنتج ${item.files.length} ملف/ملفات رقمية. تصبح روابط التحميل متاحة بعد إكمال الدفع.</div>`:''}
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px">
@@ -49,20 +69,23 @@ document.addEventListener('DOMContentLoaded',async()=>{
     });
     const btn=document.getElementById('addCartBtn');
     if(btn&&!disabled)btn.onclick=()=>{
-      const existed=cartIds().includes(item.id);
-      addToCart(item.id);
+      const existed=window.cartIds?window.cartIds().includes(item.id):false;
+      if(window.addToCart)window.addToCart(item.id);
       document.getElementById('cartMessage').innerHTML=existed?'المنتج موجود بالفعل في السلة. <a href="cart.html">فتح السلة ←</a>':'تمت الإضافة إلى السلة. <a href="cart.html">فتح السلة ←</a>';
       btn.textContent='تمت الإضافة ✓';
     };
-    const recs=recommendItems([item],3);
-    if(recs.length){
-      document.getElementById('recommendGrid').innerHTML=recommendationCards(recs);
-      document.getElementById('recommendSection').hidden=false;
+
+    if(window.recommendItems&&window.recommendationCards){
+      const recs=window.recommendItems([item],3);
+      if(recs.length){
+        document.getElementById('recommendGrid').innerHTML=window.recommendationCards(recs);
+        document.getElementById('recommendSection').hidden=false;
+      }
     }
-    reveal();
+    if(window.reveal)window.reveal();
+    else document.querySelectorAll('.reveal').forEach(x=>x.classList.add('visible'));
   }catch(err){
     console.error(err);
-    const root=document.getElementById('detailRoot');
-    if(root)root.innerHTML='<div class="empty-card"><h1>تعذر تحميل المنتج</h1><p>حدث خطأ أثناء تحميل البيانات. حاول تحديث الصفحة.</p></div>';
+    root.innerHTML='<div class="empty-card"><h1>تعذر تحميل المنتج</h1><p>حدث خطأ أثناء تحميل البيانات. حاول تحديث الصفحة.</p></div>';
   }
 });
