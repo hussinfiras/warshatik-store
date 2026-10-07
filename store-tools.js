@@ -59,15 +59,29 @@ async function loadStats(){
   }catch(e){console.error(e)}
 }
 q('#saveStorefront')?.addEventListener('click',async()=>{
-  const st=q('#storefrontStatus');if(st)st.textContent='جاري الحفظ...';
-  try{await saveStoreSettings();if(st)st.textContent='✅ تم حفظ واجهة المتجر.';toast('تم حفظ واجهة المتجر')}catch(e){if(st)st.textContent='❌ '+e.message}
+  const status=q('#storefrontStatus');
+  const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
+  if(!key){if(status)status.textContent='❌ أدخل Admin API Key في الإعدادات أولاً.';return}
+  settings.adminKey=key;
+  settings.apiBase='https://warshatik.com/api';
+  localStorage.setItem('wt_settings',JSON.stringify(settings));
+  if(q('#apiBase'))q('#apiBase').value=settings.apiBase;
+  if(status)status.textContent='جاري الحفظ...';
+  const btn=q('#saveStorefront');if(btn)btn.disabled=true;
+  try{
+    await saveStoreSettings();
+    if(status)status.textContent='✅ تم الحفظ بنجاح. حدّث المتجر خلال ثوانٍ لرؤية التغييرات.';
+    toast('تم حفظ واجهة المتجر');
+  }catch(e){
+    if(status)status.textContent='❌ '+(e.message==='Unauthorized'?'Admin API Key غير صحيح أو لا يطابق Cloudflare.':e.message);
+  }finally{if(btn)btn.disabled=false}
 });
 q('#clearHomeImage')?.addEventListener('click',()=>{if(q('#homeImage'))q('#homeImage').value=''});
 q('#homeImageInput')?.addEventListener('change',async e=>{
   const file=e.target.files?.[0];e.target.value='';if(!file)return;
   if(file.size>10*1024*1024){alert('الصورة أكبر من 10MB');return}
   try{
-    const headers={'content-type':file.type||'application/octet-stream','x-admin-key':settings.adminKey,'x-file-name':encodeURIComponent(file.name),'x-file-kind':'image','x-item-id':'home'};
+    const headers={'content-type':file.type||'application/octet-stream','x-admin-key':(q('#adminKey')?.value||settings.adminKey||'').trim(),'x-file-name':encodeURIComponent(file.name),'x-file-kind':'image','x-item-id':'home'};
     const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
     q('#homeImage').value=d.url||'';toast('تم رفع صورة الواجهة');
   }catch(err){alert(err.message)}
