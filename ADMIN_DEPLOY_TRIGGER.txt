@@ -1,1 +1,1 @@
-Trigger admin deployment for consultation ticket manager and product keywords.
+Trigger admin deployment for resilient navigation/editor recovery and cache bust.
