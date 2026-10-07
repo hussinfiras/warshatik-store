@@ -1,8 +1,9 @@
 const STATUS_TEXT={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',featured:'مميز',coming:'قريباً'};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let products=[],courses=[],editing=null,currentImages=[],currentFiles=[],dragIndex=null;
-let consultations=JSON.parse(localStorage.getItem('wt_consults')||'null')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
-let settings=JSON.parse(localStorage.getItem('wt_settings')||'null')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik-store2.hussainfiras23.workers.dev/api',adminKey:''};
+function readLocalJson(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch(e){console.warn('Bad local storage:',key,e);return null}}
+let consultations=readLocalJson('wt_consults')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
+let settings=readLocalJson('wt_settings')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik-store2.hussainfiras23.workers.dev/api',adminKey:''};
 const api=()=>((document.querySelector('#apiBase')?.value||settings.apiBase||'https://warshatik.com/api').trim().replace(/\/$/,''));
 const currentAdminKey=()=>String(document.querySelector('#adminKey')?.value||settings.adminKey||'').trim();
 function badge(s){return'badge '+(s||'normal')}function label(x){return x.statusText||STATUS_TEXT[x.status]||'عادي'}
@@ -210,3 +211,5 @@ $('#sendTestEmail').onclick=async()=>{
 };
 
 loadCatalog();
+
+window.openEditor=openEditor;window.editItem=editItem;window.delItem=delItem;
