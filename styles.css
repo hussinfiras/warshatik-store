@@ -154,3 +154,14 @@ header{z-index:60}
       rgba(247,247,247,0) 100%);
   }
 }
+
+/* Fallback homepage hero shown only when news slider is disabled */
+.fallback-hero{padding:90px 0 55px}
+.fallback-hero-inner{max-width:900px;margin-right:0;margin-left:auto;text-align:right}
+.fallback-hero h1{font-size:clamp(42px,6vw,72px);line-height:1.12;margin:14px 0}
+.fallback-hero h1 em{font-style:normal;color:var(--purple)}
+.fallback-hero p{color:var(--muted);font-size:18px;max-width:760px}
+@media(max-width:600px){
+  .fallback-hero{padding:58px 0 32px}
+  .fallback-hero h1{font-size:42px}
+}
