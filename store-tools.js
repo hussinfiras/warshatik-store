@@ -31,6 +31,7 @@ async function bridge(action,payload){
   throw new Error(lastErr?.message||'فشل الاتصال بالخادم');
 }
 
+window.adminBridge=bridge;
 function setText(id,v){const el=q(id);if(el)el.textContent=v}
 async function loadStoreSettings(){
   try{
