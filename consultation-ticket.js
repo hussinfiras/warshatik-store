@@ -4,16 +4,32 @@ const modal=q('#ticketModal'),result=q('#ticketResult'),input=q('#consultTicketC
 function qAll(s){return [...document.querySelectorAll(s)]}
 let selectedType='individual';
 const typeLabel=()=>selectedType==='supervision'?'باقة الإشراف والمتابعة':'استشارة فردية';
-function updateContactLinks(){
+function buildContactMessage(){
   const details=String(q('#consultRequestDetails')?.value||'').trim();
-  const body='مرحباً، أريد حجز تذكرة '+typeLabel()+'.\n\nالتفاصيل التي أحتاج المساعدة بها:\n'+(details||'[اكتب هنا بالتحديد ما تحتاجه في الاستشارة]');
-  const wa=q('#whatsappConsultLink');if(wa)wa.href='https://wa.me/9647867419185?text='+encodeURIComponent(body);
+  return 'مرحباً، أريد حجز تذكرة '+typeLabel()+'.\n\nالتفاصيل التي أحتاج المساعدة بها:\n'+(details||'[اكتب هنا بالتحديد ما تحتاجه في الاستشارة]');
+}
+function setContactStatus(msg){
+  const el=q('#consultContactStatus');if(el)el.textContent=msg||'';
 }
 qAll('.consult-book-btn').forEach(btn=>btn.addEventListener('click',()=>{
   selectedType=btn.dataset.consultType||'individual';
-  modal.hidden=false;updateContactLinks();input.focus();
+  modal.hidden=false;setContactStatus('');input.focus();
 }));
-q('#consultRequestDetails')?.addEventListener('input',updateContactLinks);
+q('#whatsappConsultLink')?.addEventListener('click',()=>{
+  const msg=buildContactMessage();
+  const url='https://wa.me/9647867419185?text='+encodeURIComponent(msg);
+  window.open(url,'_blank','noopener');
+});
+q('#telegramConsultLink')?.addEventListener('click',async()=>{
+  const msg=buildContactMessage();
+  try{
+    await navigator.clipboard.writeText(msg);
+    setContactStatus('تم نسخ الرسالة. الصقها في محادثة Telegram بعد فتحها.');
+  }catch{
+    setContactStatus('انسخ تفاصيل الاستشارة وأرسلها في Telegram.');
+  }
+  window.open('https://t.me/HW2DMbot','_blank','noopener');
+});
 q('#ticketClose')?.addEventListener('click',()=>{modal.hidden=true;result.innerHTML='';input.value=''});
 modal?.addEventListener('click',e=>{if(e.target===modal){modal.hidden=true;result.innerHTML=''}});
 q('#validateConsultTicket')?.addEventListener('click',async()=>{
