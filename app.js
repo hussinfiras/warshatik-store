@@ -43,7 +43,14 @@ function renderImages(){const wrap=$('#imageList');wrap.innerHTML=currentImages.
 function humanSize(n=0){if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function renderFiles(){const wrap=$('#fileList');wrap.innerHTML=currentFiles.map((f,i)=>`<div class="file-item"><div><strong>${f.name||'ملف'}</strong><small>${humanSize(f.size||0)}</small></div><button type="button" data-remove-file="${i}">حذف</button></div>`).join('');wrap.querySelectorAll('[data-remove-file]').forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.removeFile),x=currentFiles[i];if(!confirm('حذف هذا الملف؟'))return;try{if(x?.key)await deleteAsset(x.key);currentFiles.splice(i,1);renderFiles();toast('تم حذف الملف')}catch(e){alert(e.message)}})}
 function setStatusText(status,force=true){const input=$('#statusText');if(force||!input.value)input.value=STATUS_TEXT[status]||'عادي';input.readOnly=true;$('#editStatusText').textContent='✎'}
-function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#digitalOnly').checked=item?.digitalOnly??true;$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();updateNetPreview();$('#modal').classList.add('open')}
+function syncSaleFields(){
+  const sale=$('#status')?.value==='sale';
+  const a=$('#oldIqdWrap'),b=$('#oldUsdWrap');
+  if(a)a.style.display=sale?'flex':'none';
+  if(b)b.style.display=sale?'flex':'none';
+}
+
+function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#digitalOnly').checked=item?.digitalOnly??true;$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();syncSaleFields();updateNetPreview();$('#modal').classList.add('open')}
 function editItem(type,id){const a=type==='course'?courses:products;openEditor(type,a.find(x=>x.id===id))}
 async function delItem(type,id){if(!confirm('حذف؟'))return;try{await apiCall('/items/'+encodeURIComponent(id),{method:'DELETE'});await loadCatalog();toast('تم الحذف من المتجر')}catch(e){alert(e.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':e.message)}}
 function close(){ $('#modal').classList.remove('open') }
@@ -71,7 +78,7 @@ window.updateNetPreview=updateNetPreview;
 
 $('#price_iqd')?.addEventListener('input',updateNetPreview);
 $('#price_usd')?.addEventListener('input',updateNetPreview);
-$('#status').addEventListener('change',e=>setStatusText(e.target.value,true));
+$('#status').addEventListener('change',e=>{setStatusText(e.target.value,true);syncSaleFields()});
 $('#editStatusText').addEventListener('click',()=>{
   const input=$('#statusText');
   input.readOnly=!input.readOnly;
