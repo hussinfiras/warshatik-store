@@ -74,7 +74,10 @@ export default{async fetch(req,env){
       news_enabled:s.news_enabled!==false,
       news_items:Array.isArray(s.news_items)?s.news_items:[],
       home_banners:Array.isArray(s.home_banners)?s.home_banners:[],
-      digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'
+      digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',
+      show_courses:s.show_courses!==false,
+      show_products:s.show_products!==false,
+      show_consultations:s.show_consultations!==false
     },200,{'cache-control':'public, max-age=30, s-maxage=60'});
   }
 
@@ -127,7 +130,7 @@ export default{async fetch(req,env){
     if(!env.ADMIN_KEY||String(b.admin_key||'')!==env.ADMIN_KEY)return json({error:'Unauthorized'},401);
     if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
     if(b.action==='save-settings'){
-      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd'];
+      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations'];
       const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
       await putSettings(env.DB,clean);
       return json({ok:true,settings:await getSettings(env.DB)});
@@ -151,7 +154,7 @@ export default{async fetch(req,env){
 
   if(u.pathname==='/api/admin/settings'&&req.method==='POST'){
     const b=await req.json();
-    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd'];
+    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations'];
     const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
     await putSettings(env.DB,clean);
     return json({ok:true,settings:await getSettings(env.DB)});
