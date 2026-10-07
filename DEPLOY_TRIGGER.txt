@@ -1,1 +1,1 @@
-Trigger deployment for mobile logo timing, recovery logo, and section visibility controls.
+Trigger deployment for reliable product pages, mobile logo timing, and section visibility controls.
