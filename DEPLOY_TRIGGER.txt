@@ -1,1 +1,1 @@
-Trigger deployment for consultation ticket flow and product keyword recommendations.
+Trigger deployment for faster consultation ticket validation and WhatsApp contact flow.
