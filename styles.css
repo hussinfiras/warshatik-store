@@ -250,3 +250,25 @@ body[data-page="home"] .fallback-hero-centered .hero-actions{
   body[data-page="home"] .fallback-hero{min-height:auto;padding:56px 0 36px}
   body[data-page="home"] .fallback-hero-centered{width:min(100% - 24px,920px) !important}
 }
+
+/* Keep remaining homepage section cards centered when one or more sections are hidden */
+body[data-page="home"] .quick-grid{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:stretch;
+  gap:20px;
+}
+body[data-page="home"] .quick-card{
+  flex:0 1 360px;
+  width:min(360px,100%);
+  max-width:380px;
+}
+@media(max-width:900px){
+  body[data-page="home"] .quick-card{flex-basis:calc(50% - 10px);max-width:420px}
+}
+@media(max-width:600px){
+  body[data-page="home"] .quick-card{flex-basis:100%;max-width:100%}
+}
+/* Reduce work for off-screen long pages */
+.product-card,.quick-card,.consult-card{content-visibility:auto;contain-intrinsic-size:320px 430px}
