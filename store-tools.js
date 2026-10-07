@@ -63,7 +63,7 @@ q('#saveStorefront')?.addEventListener('click',async()=>{
   const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
   if(!key){if(status)status.textContent='❌ أدخل Admin API Key في الإعدادات أولاً.';return}
   settings.adminKey=key;
-  settings.apiBase='https://warshatik.com/api';
+  if(!settings.apiBase)settings.apiBase='https://warshatik-store2.hussainfiras23.workers.dev/api';
   localStorage.setItem('wt_settings',JSON.stringify(settings));
   if(q('#apiBase'))q('#apiBase').value=settings.apiBase;
   if(status)status.textContent='جاري الحفظ...';
@@ -73,7 +73,9 @@ q('#saveStorefront')?.addEventListener('click',async()=>{
     if(status)status.textContent='✅ تم الحفظ بنجاح. حدّث المتجر خلال ثوانٍ لرؤية التغييرات.';
     toast('تم حفظ واجهة المتجر');
   }catch(e){
-    if(status)status.textContent='❌ '+(e.message==='Unauthorized'?'Admin API Key غير صحيح أو لا يطابق Cloudflare.':e.message);
+    const msg=e.message==='Unauthorized'?'Admin API Key غير صحيح أو لا يطابق Cloudflare.':(e.message||'فشل الاتصال بالخادم');
+    if(status)status.textContent='❌ '+msg;
+    toast('فشل الحفظ');
   }finally{if(btn)btn.disabled=false}
 });
 q('#clearHomeImage')?.addEventListener('click',()=>{if(q('#homeImage'))q('#homeImage').value=''});
