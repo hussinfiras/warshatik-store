@@ -1,14 +1,17 @@
 document.addEventListener('DOMContentLoaded',async()=>{
   const root=document.getElementById('detailRoot');
   try{
-    const [catalogRes,storefront,region]=await Promise.all([
-      fetch('/api/catalog',{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null),
-      window.storefrontReady?window.storefrontReady:Promise.resolve({digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_products:true,show_courses:true}),
-      window.regionReady?window.regionReady:Promise.resolve({country:'XX',is_iraq:false})
-    ]);
-    const data=catalogRes||window.WARSHA_DATA||{products:[],courses:[]};
-    window.WARSHA_DATA=data;
-    const params=new URLSearchParams(location.search);
+    const storefront=window.storefrontReady?await window.storefrontReady:{digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_products:true,show_courses:true};
+    let data=window.WARSHA_DATA||{products:[],courses:[]};
+    let params=new URLSearchParams(location.search);
+    const wantedId=params.get('id');
+    let allFast=[...(data.products||[]),...(data.courses||[])];
+    if(!allFast.some(x=>x.id===wantedId)&&window.catalogRefresh){
+      const fresh=await window.catalogRefresh;
+      if(fresh)data=window.WARSHA_DATA=fresh;
+    }
+    const region=window.regionReady?await window.regionReady:{country:'XX',is_iraq:false};
+    params=new URLSearchParams(location.search);
     const id=params.get('id');
     const type=params.get('type')||'product';
     const all=[...(data.products||[]),...(data.courses||[])];
