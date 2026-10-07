@@ -8,7 +8,7 @@ const currentAdminKey=()=>String(document.querySelector('#adminKey')?.value||set
 function badge(s){return'badge '+(s||'normal')}function label(x){return x.statusText||STATUS_TEXT[x.status]||'عادي'}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 async function apiCall(path,opt={}){
-  const headers={'content-type':'application/json',...(opt.headers||{})};
+  const headers={...(opt.headers||{})};if(opt.body&&!(opt.body instanceof FormData)&&!headers['content-type'])headers['content-type']='application/json';
   const key=currentAdminKey();if(key)headers['x-admin-key']=key;
   const primary=api();
   const fallback='https://warshatik-store2.hussainfiras23.workers.dev/api';
