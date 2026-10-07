@@ -13,10 +13,12 @@ const SEED=[
 async function init(db){
   await db.exec(`CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,type TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL,price_iqd REAL NOT NULL,price_usd REAL NOT NULL,old_price_iqd REAL,old_price_usd REAL,status TEXT NOT NULL,status_text TEXT NOT NULL,short TEXT,description TEXT,features TEXT NOT NULL DEFAULT '[]',images TEXT NOT NULL DEFAULT '[]',youtube TEXT,active INTEGER NOT NULL DEFAULT 1,sort_order INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
   try{await db.exec(`ALTER TABLE items ADD COLUMN files TEXT NOT NULL DEFAULT '[]'`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN warning_text TEXT NOT NULL DEFAULT ''`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS store_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
   const c=await db.prepare('SELECT COUNT(*) c FROM items').first();
   if(Number(c.c)===0){for(const x of SEED)await db.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`).bind(x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],JSON.stringify(x[12]),JSON.stringify(x[13]),JSON.stringify(x[14]),x[15],x[16],x[17]).run();}
 }
@@ -24,7 +26,9 @@ function ensureInit(db){if(!initPromise)initPromise=init(db).catch(e=>{initPromi
 const cors={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-admin-key,x-file-name,x-file-kind,x-item-id','access-control-allow-methods':'GET,POST,DELETE,OPTIONS'};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=UTF-8',...cors,...extra}});
 function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fallback}}
-function row(r){return {...r,statusText:r.status_text,features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
+function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
+async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
+async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
 function isAdmin(req,env){return !!env.ADMIN_KEY&&req.headers.get('x-admin-key')===env.ADMIN_KEY}
 function extFrom(name,type){const m=(name||'').match(/\.([a-zA-Z0-9]{1,8})$/);if(m)return m[1].toLowerCase();const map={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/zip':'zip','application/pdf':'pdf','text/plain':'txt'};return map[type]||'bin'}
 function cleanName(name){return (name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').slice(0,90)}
@@ -56,6 +60,18 @@ export default{async fetch(req,env){
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
   await ensureInit(env.DB);
+
+  if(u.pathname==='/api/storefront'&&req.method==='GET'){
+    const s=await getSettings(env.DB);
+    return json({
+      home_title:s.home_title||'حوّل أفكارك الإلكترونية إلى مشاريع حقيقية.',
+      home_subtitle:s.home_subtitle||'دورات عملية، أكواد Arduino وESP32، ملفات مشاريع واستشارات شخصية تساعدك تتعلم وتبني مشروعك بطريقة واضحة.',
+      home_image:s.home_image||'',
+      news_enabled:s.news_enabled!==false,
+      news_items:Array.isArray(s.news_items)?s.news_items:[],
+      digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'
+    },200,{'cache-control':'public, max-age=30, s-maxage=60'});
+  }
 
   if(u.pathname==='/api/catalog'&&req.method==='GET'){
     const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache');
@@ -102,6 +118,27 @@ export default{async fetch(req,env){
 
   if(!isAdmin(req,env))return json({error:'Unauthorized'},401);
 
+  if(u.pathname==='/api/admin/settings'&&req.method==='GET'){
+    return json({settings:await getSettings(env.DB)});
+  }
+
+  if(u.pathname==='/api/admin/settings'&&req.method==='POST'){
+    const b=await req.json();
+    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd'];
+    const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
+    await putSettings(env.DB,clean);
+    return json({ok:true,settings:await getSettings(env.DB)});
+  }
+
+  if(u.pathname==='/api/admin/stats'&&req.method==='GET'){
+    const paid=await env.DB.prepare("SELECT COUNT(*) orders,COUNT(DISTINCT email) customers FROM orders WHERE payment_status='paid'").first();
+    const pending=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='pending'").first();
+    const units=await env.DB.prepare("SELECT COUNT(*) c FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid'").first();
+    const {results:revenue}=await env.DB.prepare("SELECT currency,SUM(total) total FROM orders WHERE payment_status='paid' GROUP BY currency").all();
+    const {results:top}=await env.DB.prepare("SELECT oi.item_id,oi.title,COUNT(*) sold,SUM(oi.price) revenue,o.currency FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY oi.item_id,oi.title,o.currency ORDER BY sold DESC LIMIT 10").all();
+    return json({paid_orders:Number(paid?.orders||0),customers:Number(paid?.customers||0),pending_orders:Number(pending?.c||0),units_sold:Number(units?.c||0),revenue:revenue||[],top_products:top||[]});
+  }
+
   if(u.pathname==='/api/admin/test-email'&&req.method==='POST'){
     const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({error:'Invalid email'},400);
     const mail=await sendEmail(env,email,'اختبار البريد الإلكتروني - ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>✅ البريد الإلكتروني يعمل</h2><p>تم إرسال هذه الرسالة من Cloudflare Worker الخاص بمتجر <b>ورشة تك</b> باستخدام Resend.</p><p>إذا وصلت هذه الرسالة، فإن إعدادات <b>RESEND_API_KEY</b> و <b>EMAIL_FROM</b> صحيحة.</p></div>`);
@@ -130,7 +167,7 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
+    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
