@@ -1,1 +1,1 @@
-Trigger admin deployment for automatic official Wayl fee calculator.
+Trigger admin deployment after repairing app.js syntax and Wayl calculator.
