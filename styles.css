@@ -19,3 +19,5 @@
 .ticket-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:800}
 .ticket-issued{background:#eee;color:#555}.ticket-payment_pending{background:#fff1b8;color:#755500}.ticket-paid{background:#dcf4e9;color:#146f52}.ticket-completed{background:#e8def8;color:#6135a0}.ticket-cancelled{background:#ffe0e3;color:#b62d3b}
 .ticket-status-select{min-width:130px}
+
+.ticket-ended{background:#ececec;color:#555}
