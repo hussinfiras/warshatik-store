@@ -1,1 +1,1 @@
-Trigger admin deployment for clear section hide/show buttons.
+Trigger admin deployment for automatic official Wayl fee calculator.
