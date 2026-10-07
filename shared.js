@@ -7,6 +7,8 @@ const cachedCatalog=readCatalogCache();
 if(cachedCatalog)W=window.WARSHA_DATA=cachedCatalog;
 window.catalogReady=Promise.resolve(W);
 window.catalogRefresh=(async()=>{try{const r=await fetch('/api/catalog',{cache:'default'});if(r.ok){const fresh=await r.json();W=window.WARSHA_DATA=fresh;saveCatalogCache(fresh);window.dispatchEvent(new CustomEvent('warsha:catalog-updated'));return fresh}}catch(e){console.warn('Using cached/fallback catalog',e)}return W})();
+window.storefrontReady=(async()=>{try{const r=await fetch('/api/storefront',{cache:'default'});if(r.ok)return await r.json()}catch(e){console.warn('Storefront settings unavailable',e)}return {news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}})();
+
 
 const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 720 500" role="img" aria-label="WarshaTik">
 <defs>
@@ -98,6 +100,27 @@ function updateCartCount(){const c=cartIds().length;$$('[data-cart-count]').forE
 function addToCart(id){const all=[...(W?.products||[]),...(W?.courses||[])],item=all.find(x=>x.id===id);if(!item||item.active===false||['sold','coming'].includes(item.status))return false;const ids=cartIds();if(!ids.includes(id))ids.push(id);saveCart(ids);return true}
 function removeFromCart(id){saveCart(cartIds().filter(x=>x!==id))}
 function clearCart(){saveCart([])}
+function itemWords(i){
+  const raw=[i.title,i.category,i.short,i.description,...(i.features||[])].filter(Boolean).join(' ').toLowerCase();
+  return new Set(raw.replace(/[\\/•,:;()\[\]{}|_-]+/g,' ').split(/\s+/).filter(x=>x.length>2));
+}
+function recommendItems(baseItems,limit=4){
+  const all=[...(W?.products||[]),...(W?.courses||[])].filter(x=>x.active&&!['sold','coming'].includes(x.status));
+  const baseIds=new Set((baseItems||[]).map(x=>x.id)),baseWords=new Set();
+  (baseItems||[]).forEach(x=>itemWords(x).forEach(w=>baseWords.add(w)));
+  return all.filter(x=>!baseIds.has(x.id)).map(x=>{
+    let score=0;
+    if((baseItems||[]).some(b=>b.category&&x.category&&b.category.toLowerCase()===x.category.toLowerCase()))score+=6;
+    itemWords(x).forEach(w=>{if(baseWords.has(w))score+=1});
+    if(x.status==='featured')score+=2;if(x.status==='new')score+=1;
+    return {x,score};
+  }).filter(v=>v.score>0).sort((a,b)=>b.score-a.score).slice(0,limit).map(v=>v.x);
+}
+function recommendationCards(items){
+  return items.map(i=>card(i)).join('');
+}
+window.recommendItems=recommendItems;window.recommendationCards=recommendationCards;
+
 window.addToCart=addToCart;window.removeFromCart=removeFromCart;window.clearCart=clearCart;window.cartIds=cartIds;
 
 function setupAmbientElectronics(){
