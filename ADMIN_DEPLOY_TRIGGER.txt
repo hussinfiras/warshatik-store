@@ -1,1 +1,1 @@
-Trigger admin deployment for product image dimension validation.
+Trigger admin deployment for consultation ticket manager and product keywords.
