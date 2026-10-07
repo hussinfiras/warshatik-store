@@ -213,3 +213,40 @@ header{z-index:60}
   .fallback-hero .hero-actions{width:100%}
   .quick-icon{width:62px;height:62px;font-size:26px}
 }
+
+/* Hard-center fallback hero */
+body[data-page="home"] .fallback-hero{
+  display:grid;
+  place-items:center;
+  min-height:560px;
+  padding:70px 0;
+}
+body[data-page="home"] .fallback-hero-centered{
+  width:min(920px,calc(100% - 36px)) !important;
+  max-width:920px !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  padding-left:0 !important;
+  padding-right:0 !important;
+  text-align:center !important;
+  align-items:center !important;
+  justify-content:center !important;
+}
+body[data-page="home"] .fallback-hero-centered .kicker,
+body[data-page="home"] .fallback-hero-centered h1,
+body[data-page="home"] .fallback-hero-centered p{
+  width:100% !important;
+  max-width:100% !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  text-align:center !important;
+}
+body[data-page="home"] .fallback-hero-centered .hero-actions{
+  width:100%;
+  justify-content:center !important;
+  align-items:center;
+}
+@media(max-width:600px){
+  body[data-page="home"] .fallback-hero{min-height:auto;padding:56px 0 36px}
+  body[data-page="home"] .fallback-hero-centered{width:min(100% - 24px,920px) !important}
+}
