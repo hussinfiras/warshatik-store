@@ -272,3 +272,54 @@ body[data-page="home"] .quick-card{
 }
 /* Reduce work for off-screen long pages */
 .product-card,.quick-card,.consult-card{content-visibility:auto;contain-intrinsic-size:320px 430px}
+
+/* Lock product gallery and thumbnails to fixed 16:10 frames */
+.detail-grid{align-items:start}
+.detail-grid>div{min-width:0}
+.gallery-main{
+  width:100%;
+  aspect-ratio:16/10;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:hidden;
+}
+.gallery-main .gallery-photo{
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  max-width:100%;
+  max-height:100%;
+  object-fit:cover !important;
+  object-position:center;
+  display:block;
+}
+.thumbs{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  align-items:start;
+}
+.thumb{
+  position:relative;
+  width:100%;
+  aspect-ratio:16/10;
+  height:auto !important;
+  min-height:0 !important;
+  overflow:hidden;
+  padding:0;
+}
+.thumb img{
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  max-width:100%;
+  max-height:100%;
+  object-fit:cover !important;
+  object-position:center;
+  display:block;
+}
+@media(max-width:760px){
+  .detail-grid{grid-template-columns:1fr}
+  .thumbs{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
