@@ -7,7 +7,7 @@ const cachedCatalog=readCatalogCache();
 if(cachedCatalog)W=window.WARSHA_DATA=cachedCatalog;
 window.catalogReady=Promise.resolve(W);
 window.catalogRefresh=(async()=>{try{const r=await fetch('/api/catalog',{cache:'default'});if(r.ok){const fresh=await r.json();W=window.WARSHA_DATA=fresh;saveCatalogCache(fresh);window.dispatchEvent(new CustomEvent('warsha:catalog-updated'));return fresh}}catch(e){console.warn('Using cached/fallback catalog',e)}return W})();
-window.storefrontReady=(async()=>{try{const r=await fetch('/api/storefront',{cache:'default'});if(r.ok)return await r.json()}catch(e){console.warn('Storefront settings unavailable',e)}return {news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}})();
+window.storefrontReady=(async()=>{try{const r=await fetch('/api/storefront',{cache:'default'});if(r.ok)return await r.json()}catch(e){console.warn('Storefront settings unavailable',e)}return {news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_courses:true,show_products:true,show_consultations:true}})();
 window.regionReady=(async()=>{try{const r=await fetch('/api/region',{cache:'no-store'});if(r.ok)return await r.json()}catch(e){console.warn('Region detection unavailable',e)}return {country:'XX',is_iraq:false}})();
 
 
@@ -70,10 +70,13 @@ function animatedWarshaMark(){
         fill="url(#wtLoaderGrad)"
         mask="url(#wtLeftMask)"/>
 
-  <path class="wt-tick-solid"
-        d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
-        fill="url(#wtLoaderGrad)"
-        mask="url(#wtTickMask)"/>
+  <g visibility="hidden">
+    <set attributeName="visibility" to="visible" begin="1.34s" fill="freeze"/>
+    <path class="wt-tick-solid"
+          d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
+          fill="url(#wtLoaderGrad)"
+          mask="url(#wtTickMask)"/>
+  </g>
   </svg>`;
 }
 function setupWarshaLoader(){
@@ -95,10 +98,38 @@ const currency=()=>localStorage.getItem('warsha-currency')||'IQD';
 function money(i,old=false){const usd=currency()==='USD',n=usd?(old?i.old_price_usd:i.price_usd):(old?i.old_price_iqd:i.price_iqd);if(n==null)return'';return usd?`$${Number(n).toFixed(n%1?2:0)}`:`${Number(n).toLocaleString('en-US')} د.ع`}
 function statusClass(s){return`flag flag-${s||'normal'}`}
 function imageUrl(x){if(!x)return'';return typeof x==='string'?x:(x.url||'')}
+window.storeVisibility={show_courses:true,show_products:true,show_consultations:true};
+function isItemSectionVisible(item){
+  if(!item)return false;
+  if(item.type==='course')return window.storeVisibility.show_courses!==false;
+  if(item.type==='product')return window.storeVisibility.show_products!==false;
+  return true;
+}
+window.isItemSectionVisible=isItemSectionVisible;
+function applyStoreVisibility(s={}){
+  window.storeVisibility={
+    show_courses:s.show_courses!==false,
+    show_products:s.show_products!==false,
+    show_consultations:s.show_consultations!==false
+  };
+  const rules=[
+    ['courses',window.storeVisibility.show_courses],
+    ['products',window.storeVisibility.show_products],
+    ['consultations',window.storeVisibility.show_consultations]
+  ];
+  for(const [page,show] of rules){
+    document.querySelectorAll('a[data-page="'+page+'"],a[href="'+page+'.html"]').forEach(el=>{el.style.display=show?'':'none'});
+    const bodyPage=document.body?.dataset?.page;
+    if(bodyPage===page&&!show){location.replace('index.html');return}
+  }
+}
+window.applyStoreVisibility=applyStoreVisibility;
+window.storefrontReady.then(applyStoreVisibility);
+
 function cartIds(){try{return JSON.parse(localStorage.getItem('warsha-cart')||'[]')}catch{return[]}}
 function saveCart(ids){localStorage.setItem('warsha-cart',JSON.stringify([...new Set(ids)]));updateCartCount()}
 function updateCartCount(){const c=cartIds().length;$$('[data-cart-count]').forEach(x=>{x.textContent=c;x.style.display=c?'block':'none'})}
-function addToCart(id){const all=[...(W?.products||[]),...(W?.courses||[])],item=all.find(x=>x.id===id);if(!item||item.active===false||['sold','coming'].includes(item.status))return false;const ids=cartIds();if(!ids.includes(id))ids.push(id);saveCart(ids);return true}
+function addToCart(id){const all=[...(W?.products||[]),...(W?.courses||[])],item=all.find(x=>x.id===id);if(!item||!isItemSectionVisible(item)||item.active===false||['sold','coming'].includes(item.status))return false;const ids=cartIds();if(!ids.includes(id))ids.push(id);saveCart(ids);return true}
 function removeFromCart(id){saveCart(cartIds().filter(x=>x!==id))}
 function clearCart(){saveCart([])}
 function itemWords(i){
@@ -106,7 +137,7 @@ function itemWords(i){
   return new Set(raw.replace(/[\\/•,:;()\[\]{}|_-]+/g,' ').split(/\s+/).filter(x=>x.length>2));
 }
 function recommendItems(baseItems,limit=4){
-  const all=[...(W?.products||[]),...(W?.courses||[])].filter(x=>x.active&&!['sold','coming'].includes(x.status));
+  const all=[...(W?.products||[]),...(W?.courses||[])].filter(x=>isItemSectionVisible(x)&&x.active&&!['sold','coming'].includes(x.status));
   const baseIds=new Set((baseItems||[]).map(x=>x.id)),baseWords=new Set();
   (baseItems||[]).forEach(x=>itemWords(x).forEach(w=>baseWords.add(w)));
   return all.filter(x=>!baseIds.has(x.id)).map(x=>{
@@ -143,5 +174,5 @@ function setupAmbientElectronics(){
 function setup(){applyWarshaLogo();setupWarshaLoader();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
 function reveal(){const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.1});$$('.reveal:not(.visible)').forEach(x=>o.observe(x))}
 function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong>${money(i)}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
-async function renderListing(type,target){await window.catalogReady;const paint=()=>{const list=(type==='course'?W.courses:W.products).filter(x=>x.active);const el=$(target);if(el)el.innerHTML=list.map(card).join('');reveal()};paint();window.addEventListener('warsha:catalog-updated',paint,{once:true})}
+async function renderListing(type,target){await window.catalogReady;await window.storefrontReady;if((type==='course'&&!window.storeVisibility.show_courses)||(type==='product'&&!window.storeVisibility.show_products)){location.replace('index.html');return}const paint=()=>{const list=(type==='course'?W.courses:W.products).filter(x=>x.active&&isItemSectionVisible(x));const el=$(target);if(el)el.innerHTML=list.map(card).join('');reveal()};paint();window.addEventListener('warsha:catalog-updated',paint,{once:true})}
 document.addEventListener('DOMContentLoaded',setup);
