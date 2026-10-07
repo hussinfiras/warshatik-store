@@ -7,7 +7,13 @@ const cachedCatalog=readCatalogCache();
 if(cachedCatalog)W=window.WARSHA_DATA=cachedCatalog;
 window.catalogReady=Promise.resolve(W);
 window.catalogRefresh=(async()=>{try{const r=await fetch('/api/catalog',{cache:'default'});if(r.ok){const fresh=await r.json();W=window.WARSHA_DATA=fresh;saveCatalogCache(fresh);window.dispatchEvent(new CustomEvent('warsha:catalog-updated'));return fresh}}catch(e){console.warn('Using cached/fallback catalog',e)}return W})();
-window.storefrontReady=(async()=>{try{const r=await fetch('/api/storefront',{cache:'default'});if(r.ok)return await r.json()}catch(e){console.warn('Storefront settings unavailable',e)}return {news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_courses:true,show_products:true,show_consultations:true}})();
+const STOREFRONT_CACHE_KEY='warsha-storefront-v1';
+const STOREFRONT_FALLBACK={news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_courses:true,show_products:true,show_consultations:true};
+function readStorefrontCache(){try{return JSON.parse(localStorage.getItem(STOREFRONT_CACHE_KEY)||'null')}catch{return null}}
+function saveStorefrontCache(data){try{localStorage.setItem(STOREFRONT_CACHE_KEY,JSON.stringify(data))}catch{}}
+const cachedStorefront=readStorefrontCache();
+window.storefrontReady=Promise.resolve(cachedStorefront||STOREFRONT_FALLBACK);
+window.storefrontRefresh=(async()=>{try{const r=await fetch('/api/storefront',{cache:'default'});if(r.ok){const fresh=await r.json();saveStorefrontCache(fresh);window.applyStoreVisibility?.(fresh);window.dispatchEvent(new CustomEvent('warsha:storefront-updated',{detail:fresh}));return fresh}}catch(e){console.warn('Storefront settings unavailable',e)}return cachedStorefront||STOREFRONT_FALLBACK})();
 window.regionReady=(async()=>{try{const r=await fetch('/api/region',{cache:'no-store'});if(r.ok)return await r.json()}catch(e){console.warn('Region detection unavailable',e)}return {country:'XX',is_iraq:false}})();
 
 
@@ -124,7 +130,7 @@ function applyStoreVisibility(s={}){
   }
 }
 window.applyStoreVisibility=applyStoreVisibility;
-window.storefrontReady.then(applyStoreVisibility);
+window.storefrontReady.then(applyStoreVisibility);window.storefrontRefresh?.then(applyStoreVisibility);
 
 function cartIds(){try{return JSON.parse(localStorage.getItem('warsha-cart')||'[]')}catch{return[]}}
 function saveCart(ids){localStorage.setItem('warsha-cart',JSON.stringify([...new Set(ids)]));updateCartCount()}
