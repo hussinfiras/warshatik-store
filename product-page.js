@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const p=new URLSearchParams(location.search),id=p.get('id'),type=p.get('type')||'product';
     const all=[...(window.WARSHA_DATA?.products||[]),...(window.WARSHA_DATA?.courses||[])];
     const item=all.find(x=>x.id===id),root=document.getElementById('detailRoot');
+    if(item&&!isItemSectionVisible(item)){location.replace('index.html');return}
     if(!item){
       root.innerHTML='<div class="empty-card"><h1>المنتج غير موجود</h1><p>قد يكون الرابط قديماً أو تم إخفاء المنتج.</p><a class="btn btn-primary" href="products.html">الرجوع للمنتجات</a></div>';
       return;
