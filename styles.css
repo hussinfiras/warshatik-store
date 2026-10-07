@@ -114,3 +114,43 @@ header{z-index:60}
   .home-banner-content p,
   .home-banner-kicker{text-align:right}
 }
+
+/* Wider readable area for homepage banner text */
+.home-banner-content{
+  width:min(52%,640px);
+  padding-right:72px;
+  padding-left:72px;
+}
+.home-banner-overlay{
+  background:linear-gradient(270deg,
+    rgba(247,247,247,.99) 0%,
+    rgba(247,247,247,.98) 30%,
+    rgba(247,247,247,.90) 48%,
+    rgba(247,247,247,.58) 62%,
+    rgba(247,247,247,.18) 78%,
+    rgba(247,247,247,0) 100%);
+}
+.iraq-warning{
+  margin:18px 0;
+  padding:14px 16px;
+  border:1px solid #f0c36b;
+  background:#fff8e8;
+  color:#7a5600;
+  border-radius:15px;
+  display:flex;
+  gap:9px;
+  align-items:flex-start;
+}
+.iraq-warning strong{flex:0 0 auto}
+.iraq-warning span{font-size:13px}
+@media(max-width:800px){
+  .home-banner-content{width:100%;padding:190px 24px 28px}
+  .home-banner-overlay{
+    background:linear-gradient(0deg,
+      rgba(247,247,247,.99) 0%,
+      rgba(247,247,247,.96) 38%,
+      rgba(247,247,247,.72) 56%,
+      rgba(247,247,247,.16) 78%,
+      rgba(247,247,247,0) 100%);
+  }
+}
