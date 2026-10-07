@@ -1,1 +1,1 @@
-Trigger deployment for consultation contact template fixes and typing performance.
+Trigger deployment for simplified WhatsApp-only three-step consultation booking.
