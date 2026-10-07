@@ -1,1 +1,1 @@
-Trigger admin deployment for section visibility settings - refresh 2026-10-07.
+Trigger admin deployment for clear section hide/show buttons.
