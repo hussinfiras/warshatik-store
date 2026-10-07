@@ -53,6 +53,7 @@ async function loadStoreSettings(){
     if(q('#showCourses'))q('#showCourses').checked=s.show_courses!==false;
     if(q('#showProducts'))q('#showProducts').checked=s.show_products!==false;
     if(q('#showConsultations'))q('#showConsultations').checked=s.show_consultations!==false;
+    updateVisibilityButtons();
     if(q('#waylFeePercent'))q('#waylFeePercent').value=s.wayl_fee_percent??'';
     if(q('#waylFixedIQD'))q('#waylFixedIQD').value=s.wayl_fixed_iqd??'';
     if(q('#waylFixedUSD'))q('#waylFixedUSD').value=s.wayl_fixed_usd??'';
@@ -143,6 +144,37 @@ async function uploadBannerImage(file,index){
 [1,2,3].forEach(i=>q('#banner'+i+'Upload')?.addEventListener('change',async e=>{
   const file=e.target.files?.[0];e.target.value='';await uploadBannerImage(file,i);
 }));
+
+function updateVisibilityButtons(){
+  const map=[
+    ['#toggleProducts','#showProducts','المنتجات'],
+    ['#toggleCourses','#showCourses','الدورات'],
+    ['#toggleConsultations','#showConsultations','الاستشارات']
+  ];
+  map.forEach(([btnSel,checkSel])=>{
+    const btn=q(btnSel),check=q(checkSel);if(!btn||!check)return;
+    const visible=check.checked;
+    btn.textContent=visible?'إخفاء القسم':'إظهار القسم';
+    btn.classList.toggle('is-hidden',!visible);
+    btn.title=visible?'سيتم إخفاء القسم وكل محتواه من المتجر':'سيتم إظهار القسم من جديد';
+  });
+}
+async function toggleSection(checkSelector,buttonSelector){
+  const check=q(checkSelector),btn=q(buttonSelector);if(!check||!btn)return;
+  const previous=check.checked;
+  check.checked=!previous;updateVisibilityButtons();
+  btn.disabled=true;
+  try{
+    await saveStoreSettings();
+    toast(check.checked?'تم إظهار القسم':'تم إخفاء القسم');
+  }catch(e){
+    check.checked=previous;updateVisibilityButtons();
+    alert(e.message==='Unauthorized'?'Admin API Key غير صحيح أو لا يطابق Cloudflare.':e.message);
+  }finally{btn.disabled=false}
+}
+q('#toggleProducts')?.addEventListener('click',()=>toggleSection('#showProducts','#toggleProducts'));
+q('#toggleCourses')?.addEventListener('click',()=>toggleSection('#showCourses','#toggleCourses'));
+q('#toggleConsultations')?.addEventListener('click',()=>toggleSection('#showConsultations','#toggleConsultations'));
 
 loadStoreSettings();loadStats();
 })();
