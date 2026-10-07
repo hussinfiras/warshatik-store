@@ -117,6 +117,28 @@ export default{async fetch(req,env){
     if(!env.MEDIA)return new Response('R2 binding missing',{status:503});const raw=decodeURIComponent(u.pathname.split('/').pop()),h=await hashText(raw),now=Date.now();const t=await env.DB.prepare('SELECT * FROM download_tokens WHERE token_hash=? AND expires_at>?').bind(h,now).first();if(!t)return new Response('Download link expired or invalid',{status:403});const paid=await env.DB.prepare("SELECT payment_status FROM orders WHERE id=?").bind(t.order_id).first();if(!paid||paid.payment_status!=='paid')return new Response('Order is not paid',{status:403});const obj=await env.MEDIA.get(t.file_key);if(!obj)return new Response('File not found',{status:404});const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('content-disposition',`attachment; filename="${cleanName(t.file_name)}"`);headers.set('cache-control','private, no-store');return new Response(obj.body,{headers});
   }
 
+  if(u.pathname==='/api/admin/bridge'&&req.method==='POST'){
+    let b={};
+    try{b=JSON.parse(await req.text())}catch{return json({error:'Invalid request'},400)}
+    if(!env.ADMIN_KEY||String(b.admin_key||'')!==env.ADMIN_KEY)return json({error:'Unauthorized'},401);
+    if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
+    if(b.action==='save-settings'){
+      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd'];
+      const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
+      await putSettings(env.DB,clean);
+      return json({ok:true,settings:await getSettings(env.DB)});
+    }
+    if(b.action==='stats'){
+      const paid=await env.DB.prepare("SELECT COUNT(*) orders,COUNT(DISTINCT email) customers FROM orders WHERE payment_status='paid'").first();
+      const pending=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='pending'").first();
+      const units=await env.DB.prepare("SELECT COUNT(*) c FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid'").first();
+      const {results:revenue}=await env.DB.prepare("SELECT currency,SUM(total) total FROM orders WHERE payment_status='paid' GROUP BY currency").all();
+      const {results:top}=await env.DB.prepare("SELECT oi.item_id,oi.title,COUNT(*) sold,SUM(oi.price) revenue,o.currency FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY oi.item_id,oi.title,o.currency ORDER BY sold DESC LIMIT 10").all();
+      return json({paid_orders:Number(paid?.orders||0),customers:Number(paid?.customers||0),pending_orders:Number(pending?.c||0),units_sold:Number(units?.c||0),revenue:revenue||[],top_products:top||[]});
+    }
+    return json({error:'Unknown action'},400);
+  }
+
   if(!isAdmin(req,env))return json({error:'Unauthorized'},401);
 
   if(u.pathname==='/api/admin/settings'&&req.method==='GET'){
