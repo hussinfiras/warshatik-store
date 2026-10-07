@@ -1,1 +1,1 @@
-Trigger deployment for product image frame and image dimension validation.
+Trigger deployment for fixed product gallery and thumbnail aspect ratios.
