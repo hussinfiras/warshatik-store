@@ -80,3 +80,37 @@ header{z-index:60}
   .home-banner-content .btn{align-self:flex-start}
   .banner-prev{right:8px}.banner-next{left:8px}
 }
+
+/* Homepage banner positioning refinement */
+.home-banner-section{padding:34px 0 14px}
+.home-banner-stage,.home-banner-card{min-height:390px}
+.home-banner-content{
+  width:min(44%,520px);
+  margin-left:auto;
+  margin-right:0;
+  padding:52px 60px;
+  min-height:390px;
+  text-align:right;
+  align-items:flex-start;
+  direction:rtl;
+}
+.home-banner-content h2,
+.home-banner-content p,
+.home-banner-kicker{width:100%;text-align:right}
+.home-banner-content .btn{align-self:flex-start}
+.home-banner-overlay{
+  background:linear-gradient(270deg,rgba(247,247,247,.98) 0%,rgba(247,247,247,.92) 28%,rgba(247,247,247,.42) 52%,rgba(247,247,247,.08) 75%,rgba(247,247,247,0) 100%)
+}
+@media(max-width:800px){
+  .home-banner-content{
+    width:100%;
+    margin:0;
+    padding:190px 24px 28px;
+    min-height:390px;
+    text-align:right;
+    align-items:flex-start;
+  }
+  .home-banner-content h2,
+  .home-banner-content p,
+  .home-banner-kicker{text-align:right}
+}
