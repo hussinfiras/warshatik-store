@@ -16,6 +16,8 @@ async function init(db){
   try{await db.exec(`ALTER TABLE items ADD COLUMN warning_text TEXT NOT NULL DEFAULT ''`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN digital_only INTEGER NOT NULL DEFAULT 1`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN iraq_only INTEGER NOT NULL DEFAULT 0`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'`)}catch{}
+  await db.exec(`CREATE TABLE IF NOT EXISTS consultation_tickets(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,customer_name TEXT NOT NULL,contact_method TEXT NOT NULL,contact_value TEXT,scheduled_date TEXT NOT NULL,consultation_type TEXT NOT NULL,amount_iqd REAL NOT NULL,status TEXT NOT NULL DEFAULT 'issued',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
@@ -28,7 +30,7 @@ function ensureInit(db){if(!initPromise)initPromise=init(db).catch(e=>{initPromi
 const cors={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-admin-key,x-file-name,x-file-kind,x-item-id','access-control-allow-methods':'GET,POST,DELETE,OPTIONS'};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=UTF-8',...cors,...extra}});
 function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fallback}}
-function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
+function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,keywords:safeParse(r.keywords),features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
 async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
 function isAdmin(req,env){const expected=String(env.ADMIN_KEY||'').trim();const provided=String(req.headers.get('x-admin-key')||'').trim();return !!expected&&provided===expected}
@@ -37,6 +39,7 @@ function cleanName(name){return (name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').
 function normEmail(v){return String(v||'').trim().toLowerCase()}
 function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
 function randomToken(bytes=32){const a=new Uint8Array(bytes);crypto.getRandomValues(a);return [...a].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function random10DigitCode(){const a=new Uint32Array(1);crypto.getRandomValues(a);return String(1000000000+(a[0]%9000000000)).padStart(10,'0')}
 async function hashText(v){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function sendEmail(env,to,subject,html){
   if(!env.RESEND_API_KEY||!env.EMAIL_FROM)return {sent:false,reason:'Email provider not configured'};
@@ -108,6 +111,24 @@ export default{async fetch(req,env){
     return json({ok:true,order_id:orderId,email,currency,total});
   }
 
+  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
+    const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
+    if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
+    const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
+    if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
+    return json({ok:true,ticket:t});
+  }
+
+  if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
+    const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
+    const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+    if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
+    if(t.status==='paid')return json({ok:true,paid:true,ticket:t});
+    if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
+    await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending' WHERE code=? AND status='issued'").bind(code).run();
+    return json({ok:true,payment_ready:false,code,amount_iqd:t.amount_iqd,message:'التذكرة جاهزة للدفع. سيتم ربطها ببوابة Wayl في مرحلة تفعيل الدفع النهائية.'});
+  }
+
   if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
     const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({ok:true});
     const paid=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE email=? AND payment_status='paid'").bind(email).first();
@@ -142,6 +163,29 @@ export default{async fetch(req,env){
       const {results:revenue}=await env.DB.prepare("SELECT currency,SUM(total) total FROM orders WHERE payment_status='paid' GROUP BY currency").all();
       const {results:top}=await env.DB.prepare("SELECT oi.item_id,oi.title,COUNT(*) sold,SUM(oi.price) revenue,o.currency FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY oi.item_id,oi.title,o.currency ORDER BY sold DESC LIMIT 10").all();
       return json({paid_orders:Number(paid?.orders||0),customers:Number(paid?.customers||0),pending_orders:Number(pending?.c||0),units_sold:Number(units?.c||0),revenue:revenue||[],top_products:top||[]});
+    }
+    if(b.action==='create-consultation-ticket'){
+      const p=b.payload||{},name=String(p.customer_name||'').trim(),method=String(p.contact_method||'').trim(),value=String(p.contact_value||'').trim(),date=String(p.scheduled_date||'').trim(),type=String(p.consultation_type||'individual');
+      if(!name||!method||!date)return json({error:'الاسم وطريقة التواصل والتاريخ مطلوبة.'},400);
+      const amount=type==='supervision'?100000:20000;
+      let code='',exists=true;for(let i=0;i<8&&exists;i++){code=random10DigitCode();exists=!!(await env.DB.prepare('SELECT 1 x FROM consultation_tickets WHERE code=?').bind(code).first());}
+      if(exists)return json({error:'تعذر إنشاء رمز فريد. حاول مرة أخرى.'},500);
+      const id=crypto.randomUUID();
+      await env.DB.prepare('INSERT INTO consultation_tickets(id,code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,code,name,method,value,date,type,amount,'issued').run();
+      return json({ok:true,ticket:{id,code,customer_name:name,contact_method:method,contact_value:value,scheduled_date:date,consultation_type:type,amount_iqd:amount,status:'issued'}});
+    }
+    if(b.action==='list-consultation-tickets'){
+      const {results}=await env.DB.prepare('SELECT * FROM consultation_tickets ORDER BY created_at DESC LIMIT 200').all();
+      return json({tickets:results||[]});
+    }
+    if(b.action==='set-consultation-ticket-status'){
+      const p=b.payload||{},code=String(p.code||''),status=String(p.status||'');
+      const allowed=['issued','payment_pending','paid','completed','cancelled'];
+      if(!allowed.includes(status))return json({error:'Invalid status'},400);
+      if(status==='paid')await env.DB.prepare("UPDATE consultation_tickets SET status='paid',paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP),payment_reference=COALESCE(?,payment_reference) WHERE code=?").bind(String(p.payment_reference||'ADMIN-MANUAL'),code).run();
+      else await env.DB.prepare('UPDATE consultation_tickets SET status=? WHERE code=?').bind(status,code).run();
+      const ticket=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+      return json({ok:true,ticket});
     }
     return json({error:'Unknown action'},400);
   }
@@ -197,7 +241,7 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
+    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
