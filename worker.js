@@ -69,6 +69,7 @@ export default{async fetch(req,env){
       home_image:s.home_image||'',
       news_enabled:s.news_enabled!==false,
       news_items:Array.isArray(s.news_items)?s.news_items:[],
+      home_banners:Array.isArray(s.home_banners)?s.home_banners:[],
       digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'
     },200,{'cache-control':'public, max-age=30, s-maxage=60'});
   }
@@ -124,7 +125,7 @@ export default{async fetch(req,env){
 
   if(u.pathname==='/api/admin/settings'&&req.method==='POST'){
     const b=await req.json();
-    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd'];
+    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd'];
     const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
     await putSettings(env.DB,clean);
     return json({ok:true,settings:await getSettings(env.DB)});
