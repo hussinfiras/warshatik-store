@@ -1,1 +1,1 @@
-Trigger Cloudflare deployment for homepage banner layout cleanup.
+Trigger deployment for banner shade and product availability controls.
