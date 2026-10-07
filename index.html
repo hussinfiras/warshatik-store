@@ -1,4 +1,14 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#8055c2"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"><title>ورشة تك | warshaTik</title></head><body data-page="home"><header><div class="container nav"><a class="brand" href="index.html"><div class="logo">WT</div><span><strong>ورشة تك</strong><small>warshaTik</small></span></a><nav class="nav-links" id="navLinks"><a data-page="home" href="index.html">الرئيسية</a><a data-page="courses" href="courses.html">الدورات</a><a data-page="products" href="products.html">المنتجات</a><a data-page="consultations" href="consultations.html">الاستشارات</a></nav><div class="nav-actions"><button class="currency-btn" id="currencyToggle">IQD</button><button class="menu-btn" id="menuButton" aria-label="القائمة"><i></i><i></i><i></i></button></div></div></header><main><section class="home-banner-section" id="homeBannerSection" hidden>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#8055c2"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"><title>ورشة تك | warshaTik</title></head><body data-page="home"><header><div class="container nav"><a class="brand" href="index.html"><div class="logo">WT</div><span><strong>ورشة تك</strong><small>warshaTik</small></span></a><nav class="nav-links" id="navLinks"><a data-page="home" href="index.html">الرئيسية</a><a data-page="courses" href="courses.html">الدورات</a><a data-page="products" href="products.html">المنتجات</a><a data-page="consultations" href="consultations.html">الاستشارات</a></nav><div class="nav-actions"><button class="currency-btn" id="currencyToggle">IQD</button><button class="menu-btn" id="menuButton" aria-label="القائمة"><i></i><i></i><i></i></button></div></div></header><main><section class="fallback-hero" id="fallbackHero" hidden>
+  <div class="container fallback-hero-inner reveal">
+    <span class="kicker">تعلم • ابنِ • جرّب</span>
+    <h1 id="fallbackTitle">حوّل أفكارك الإلكترونية إلى <em>مشاريع حقيقية.</em></h1>
+    <p id="fallbackSubtitle">دورات عملية، أكواد Arduino وESP32، ملفات مشاريع واستشارات شخصية تساعدك تتعلم وتبني مشروعك بطريقة واضحة.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="courses.html">استكشف الدورات</a>
+      <a class="btn btn-ghost" href="products.html">المنتجات الرقمية</a>
+    </div>
+  </div>
+</section><section class="home-banner-section" id="homeBannerSection" hidden>
   <div class="container">
     <div class="home-banner-shell">
       <button class="banner-arrow banner-prev" id="bannerPrev" type="button" aria-label="السابق">‹</button>
@@ -11,8 +21,15 @@
 document.addEventListener('DOMContentLoaded',async()=>{
   const s=await window.storefrontReady;
   const banners=Array.isArray(s.home_banners)?s.home_banners.filter(x=>x&&(x.image||x.title||x.subtitle)):[];
-  const section=document.getElementById('homeBannerSection'),stage=document.getElementById('homeBannerStage'),dots=document.getElementById('bannerDots');
-  if(banners.length){
+  const section=document.getElementById('homeBannerSection'),stage=document.getElementById('homeBannerStage'),dots=document.getElementById('bannerDots'),fallback=document.getElementById('fallbackHero');
+  const newsEnabled=s.news_enabled!==false;
+  if(!newsEnabled){
+    fallback.hidden=false;
+    const ft=document.getElementById('fallbackTitle'),fs=document.getElementById('fallbackSubtitle');
+    if(s.home_title)ft.textContent=s.home_title;
+    if(s.home_subtitle)fs.textContent=s.home_subtitle;
+  }
+  if(newsEnabled&&banners.length){
     section.hidden=false;
     let current=0,timer=null;
     const esc=v=>String(v||'').replace(/[<>&"]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[m]));
