@@ -31,7 +31,7 @@ function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fa
 function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
 async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
-function isAdmin(req,env){return !!env.ADMIN_KEY&&req.headers.get('x-admin-key')===env.ADMIN_KEY}
+function isAdmin(req,env){const expected=String(env.ADMIN_KEY||'').trim();const provided=String(req.headers.get('x-admin-key')||'').trim();return !!expected&&provided===expected}
 function extFrom(name,type){const m=(name||'').match(/\.([a-zA-Z0-9]{1,8})$/);if(m)return m[1].toLowerCase();const map={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/zip':'zip','application/pdf':'pdf','text/plain':'txt'};return map[type]||'bin'}
 function cleanName(name){return (name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').slice(0,90)}
 function normEmail(v){return String(v||'').trim().toLowerCase()}
@@ -127,7 +127,7 @@ export default{async fetch(req,env){
   if(u.pathname==='/api/admin/bridge'&&req.method==='POST'){
     let b={};
     try{b=JSON.parse(await req.text())}catch{return json({error:'Invalid request'},400)}
-    if(!env.ADMIN_KEY||String(b.admin_key||'')!==env.ADMIN_KEY)return json({error:'Unauthorized'},401);
+    const expectedAdminKey=String(env.ADMIN_KEY||'').trim();const providedAdminKey=String(b.admin_key||'').trim();if(!expectedAdminKey||providedAdminKey!==expectedAdminKey)return json({error:'Unauthorized'},401);
     if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
     if(b.action==='save-settings'){
       const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations'];
