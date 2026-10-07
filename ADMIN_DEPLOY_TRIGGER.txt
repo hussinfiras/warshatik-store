@@ -1,1 +1,1 @@
-Trigger admin deployment after repairing app.js syntax and Wayl calculator.
+Trigger admin deployment for product image dimension validation.
