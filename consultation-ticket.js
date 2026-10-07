@@ -1,9 +1,19 @@
 (()=>{
 const q=s=>document.querySelector(s);
 const modal=q('#ticketModal'),result=q('#ticketResult'),input=q('#consultTicketCode');
-qAll('.consult-book-btn').forEach?.(()=>{});
 function qAll(s){return [...document.querySelectorAll(s)]}
-qAll('.consult-book-btn').forEach(btn=>btn.addEventListener('click',()=>{modal.hidden=false;input.focus()}));
+let selectedType='individual';
+const typeLabel=()=>selectedType==='supervision'?'باقة الإشراف والمتابعة':'استشارة فردية';
+function updateContactLinks(){
+  const details=String(q('#consultRequestDetails')?.value||'').trim();
+  const body='مرحباً، أريد حجز تذكرة '+typeLabel()+'.\n\nالتفاصيل التي أحتاج المساعدة بها:\n'+(details||'[اكتب هنا بالتحديد ما تحتاجه في الاستشارة]');
+  const wa=q('#whatsappConsultLink');if(wa)wa.href='https://wa.me/9647867419185?text='+encodeURIComponent(body);
+}
+qAll('.consult-book-btn').forEach(btn=>btn.addEventListener('click',()=>{
+  selectedType=btn.dataset.consultType||'individual';
+  modal.hidden=false;updateContactLinks();input.focus();
+}));
+q('#consultRequestDetails')?.addEventListener('input',updateContactLinks);
 q('#ticketClose')?.addEventListener('click',()=>{modal.hidden=true;result.innerHTML='';input.value=''});
 modal?.addEventListener('click',e=>{if(e.target===modal){modal.hidden=true;result.innerHTML=''}});
 q('#validateConsultTicket')?.addEventListener('click',async()=>{
@@ -14,6 +24,8 @@ q('#validateConsultTicket')?.addEventListener('click',async()=>{
     const r=await fetch('/api/consultations/validate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code})});
     const d=await r.json();if(!r.ok)throw new Error(d.error||'رمز غير صحيح');
     const t=d.ticket;
+    if(t.status==='ended'){result.innerHTML='<div class="ticket-error">انتهت الجلسة، حاول مرة أخرى.</div>';return}
+    if(t.status==='cancelled'){result.innerHTML='<div class="ticket-error">هذه التذكرة ملغاة.</div>';return}
     const paid=t.status==='paid'||t.status==='completed';
     result.innerHTML=`<div class="ticket-valid">
       <strong>✓ التذكرة صحيحة</strong>
