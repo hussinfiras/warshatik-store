@@ -165,3 +165,51 @@ header{z-index:60}
   .fallback-hero{padding:58px 0 32px}
   .fallback-hero h1{font-size:42px}
 }
+
+/* Center fallback hero and make quick-section icons more prominent */
+.fallback-hero-inner{
+  max-width:980px;
+  margin:0 auto;
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.fallback-hero .kicker,
+.fallback-hero h1,
+.fallback-hero p{width:100%;text-align:center}
+.fallback-hero p{margin-left:auto;margin-right:auto}
+.fallback-hero .hero-actions{justify-content:center}
+
+.quick-card{text-align:center;position:relative;overflow:hidden}
+.quick-card::before{
+  content:"";
+  position:absolute;
+  width:120px;height:120px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(128,85,194,.13),rgba(128,85,194,0) 70%);
+  top:-42px;left:50%;transform:translateX(-50%);
+  pointer-events:none;
+}
+.quick-icon{
+  width:68px;height:68px;
+  border-radius:22px;
+  margin:0 auto;
+  font-size:29px;
+  background:linear-gradient(145deg,#f4ecff,#e5d4fa);
+  border:1px solid #dfcdf4;
+  box-shadow:0 12px 28px rgba(128,85,194,.20);
+  transform:translateY(0);
+  transition:transform .28s ease,box-shadow .28s ease;
+}
+.quick-card:hover .quick-icon{
+  transform:translateY(-6px) scale(1.08);
+  box-shadow:0 18px 34px rgba(128,85,194,.28);
+}
+.quick-card h3{font-size:21px}
+.quick-card b{display:inline-block;margin-top:6px}
+@media(max-width:600px){
+  .fallback-hero-inner{padding-inline:6px}
+  .fallback-hero .hero-actions{width:100%}
+  .quick-icon{width:62px;height:62px;font-size:26px}
+}
