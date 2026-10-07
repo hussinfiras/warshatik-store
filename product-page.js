@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     await window.catalogReady;
     if(window.catalogRefresh) await window.catalogRefresh;
     const storefront=window.storefrontReady?await window.storefrontReady:{digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'};
+    const region=window.regionReady?await window.regionReady:{country:'XX',is_iraq:false};
     const p=new URLSearchParams(location.search),id=p.get('id'),type=p.get('type')||'product';
     const all=[...(window.WARSHA_DATA?.products||[]),...(window.WARSHA_DATA?.courses||[])];
     const item=all.find(x=>x.id===id),root=document.getElementById('detailRoot');
@@ -11,7 +12,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
       return;
     }
     document.title=item.title+' | ورشة تك';
-    const disabled=['sold','coming'].includes(item.status);
+    const blockedByRegion=!!item.iraqOnly&&!region.is_iraq;
+    const disabled=['sold','coming'].includes(item.status)||blockedByRegion;
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
     root.innerHTML=`<div class="reveal">
@@ -28,10 +30,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <p class="desc">${item.description||''}</p>
       <div class="detail-price">${item.old_price_iqd?`<small class="old-price">${money(item,true)}</small>`:''}${money(item)}</div>
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
-      ${(item.warningText||storefront.digital_warning_default)?`<div class="digital-warning"><strong>تنبيه</strong><span>${item.warningText||storefront.digital_warning_default}</span></div>`:''}
+      ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default}</span></div>`:''}
+      ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
       ${(item.files||[]).length?`<div class="download-note">يتضمن هذا المنتج ${item.files.length} ملف/ملفات رقمية. تصبح روابط التحميل متاحة بعد إكمال الدفع.</div>`:''}
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px">
-        <button id="addCartBtn" class="btn btn-primary" ${disabled?'disabled style="opacity:.45;cursor:not-allowed"':''}>${disabled?(item.status==='sold'?'غير متوفر حالياً':'قريباً'):'أضف للسلة'}</button>
+        <button id="addCartBtn" class="btn btn-primary" ${disabled?'disabled style="opacity:.45;cursor:not-allowed"':''}>${blockedByRegion?'متاح داخل العراق فقط':(disabled?(item.status==='sold'?'غير متوفر حالياً':'قريباً'):'أضف للسلة')}</button>
         <a class="btn btn-ghost" href="${type==='course'?'courses.html':'products.html'}">رجوع</a>
       </div>
       <p id="cartMessage" style="color:#8055c2;font-weight:700;margin-top:12px"></p>
