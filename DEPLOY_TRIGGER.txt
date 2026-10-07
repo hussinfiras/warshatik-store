@@ -1,1 +1,1 @@
-Trigger Cloudflare deployment after WarshaTik logo animation fixes.
+Trigger Cloudflare store deployment for homepage banner carousel and product-page fixes.
