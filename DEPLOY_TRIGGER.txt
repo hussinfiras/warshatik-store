@@ -1,1 +1,1 @@
-Trigger deployment for fixed product gallery and thumbnail aspect ratios.
+Trigger deployment for consultation ticket flow and product keyword recommendations.
