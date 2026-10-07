@@ -1,1 +1,1 @@
-Trigger deployment for sale-only old-price display.
+Trigger deployment for normalized admin key authentication.
