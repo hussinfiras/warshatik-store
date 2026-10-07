@@ -1,1 +1,1 @@
-Trigger Cloudflare store deployment for homepage banner carousel and product-page fixes.
+Trigger Cloudflare deployment for admin bridge connectivity fix.
