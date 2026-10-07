@@ -1,1 +1,1 @@
-Trigger deployment for forced homepage hero centering.
+Trigger deployment for mobile logo timing, recovery logo, and section visibility controls.
