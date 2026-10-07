@@ -1,1 +1,1 @@
-Trigger deployment for centered hidden sections, faster storefront navigation, and product loading.
+Trigger deployment for sale-only old-price display.
