@@ -86,12 +86,35 @@ $('#editStatusText').addEventListener('click',()=>{
   if(!input.readOnly){input.focus();input.select()}
 });
 
+function readImageSize(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{const out={width:img.naturalWidth,height:img.naturalHeight};URL.revokeObjectURL(url);resolve(out)};
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('تعذر قراءة أبعاد الصورة'))};
+    img.src=url;
+  });
+}
+async function validateProductImage(file){
+  const {width,height}=await readImageSize(file);
+  const ratio=width/height;
+  const minWidth=1000,minHeight=625,minRatio=1.45,maxRatio=1.75;
+  if(width<minWidth||height<minHeight){
+    throw new Error('أبعاد الصورة صغيرة. الحد الأدنى 1000 × 625 بكسل، والمقاس المقترح 1600 × 1000.');
+  }
+  if(ratio<minRatio||ratio>maxRatio){
+    throw new Error('نسبة أبعاد الصورة غير مناسبة. استخدم صورة قريبة من 16:10 مثل 1600 × 1000 بكسل.');
+  }
+  return {width,height};
+}
+
 $('#imageInput').addEventListener('change',async e=>{
   const files=[...e.target.files];e.target.value='';
   for(const file of files){
     if(!file.type.startsWith('image/'))continue;
     if(file.size>10*1024*1024){alert(file.name+' أكبر من 10MB');continue}
     try{
+      await validateProductImage(file);
       toast('جاري رفع '+file.name+' ...');
       const x=await uploadAsset(file,'image');
       currentImages.push(x);renderImages();toast('تم رفع الصورة');
