@@ -1,1 +1,1 @@
-Trigger deployment for centered fallback hero and refreshed quick-section icons.
+Trigger deployment for forced homepage hero centering.
