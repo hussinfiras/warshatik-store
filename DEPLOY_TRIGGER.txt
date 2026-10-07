@@ -1,1 +1,1 @@
-Trigger deployment for normalized admin key authentication.
+Trigger deployment for product image frame and image dimension validation.
