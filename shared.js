@@ -70,13 +70,11 @@ function animatedWarshaMark(){
         fill="url(#wtLoaderGrad)"
         mask="url(#wtLeftMask)"/>
 
-  <g visibility="hidden">
-    <set attributeName="visibility" to="visible" begin="1.34s" fill="freeze"/>
-    <path class="wt-tick-solid"
-          d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
-          fill="url(#wtLoaderGrad)"
-          mask="url(#wtTickMask)"/>
-  </g>
+  <path class="wt-tick-solid wt-tick-delayed"
+        d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
+        fill="url(#wtLoaderGrad)"
+        mask="url(#wtTickMask)"
+        style="opacity:0"/>
   </svg>`;
 }
 function setupWarshaLoader(){
@@ -87,11 +85,13 @@ function setupWarshaLoader(){
   overlay.className='wt-brand-loader';
   overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;
   document.body.appendChild(overlay);
+  const tick=overlay.querySelector('.wt-tick-delayed');
+  if(tick)setTimeout(()=>{tick.style.opacity='1'},1340);
   const started=performance.now();
   const hide=()=>{const wait=Math.max(0,2500-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
   if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
 }
-window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);return overlay};
+window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);const tick=overlay.querySelector('.wt-tick-delayed');if(tick)setTimeout(()=>{tick.style.opacity='1'},1340);return overlay};
 window.hideWarshaLoader=()=>{const overlay=document.querySelector('.wt-brand-loader');if(overlay){overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)}};
 
 const currency=()=>localStorage.getItem('warsha-currency')||'IQD';
