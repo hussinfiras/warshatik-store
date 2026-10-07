@@ -342,3 +342,16 @@ body[data-page="home"] .quick-card{
 .consult-contact-buttons{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
 .consult-contact-buttons .btn{flex:1;min-width:150px}
 .ticket-modal-card textarea{width:100%;min-height:105px;resize:vertical;border:1px solid var(--border);border-radius:13px;padding:12px 14px;font:600 14px/1.8 Cairo,sans-serif;letter-spacing:0;text-align:right}
+
+/* Keep consultation typing lightweight on phones */
+.consult-contact-buttons button{font:inherit;cursor:pointer}
+.consult-contact-status{min-height:20px;margin:8px 0 0;color:#8055c2;font-weight:700}
+.ticket-modal{backdrop-filter:none}
+.ticket-modal-card textarea{
+  contain:content;
+  will-change:auto;
+  transform:none;
+}
+@media(min-width:900px){
+  .ticket-modal{background:rgba(24,19,31,.58)}
+}
