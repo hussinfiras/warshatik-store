@@ -2,7 +2,7 @@ const STATUS_TEXT={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let products=[],courses=[],editing=null,currentImages=[],currentFiles=[],dragIndex=null;
 let consultations=JSON.parse(localStorage.getItem('wt_consults')||'null')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
-let settings=JSON.parse(localStorage.getItem('wt_settings')||'null')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik-store2.hussainfiras23.workers.dev/api',adminKey:''};
+let settings=JSON.parse(localStorage.getItem('wt_settings')||'null')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik.com/api',adminKey:''};
 const api=()=>settings.apiBase.replace(/\/$/,'');
 function badge(s){return'badge '+(s||'normal')}function label(x){return x.statusText||STATUS_TEXT[x.status]||'عادي'}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
