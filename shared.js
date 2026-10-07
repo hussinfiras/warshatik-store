@@ -139,7 +139,7 @@ function addToCart(id){const all=[...(W?.products||[]),...(W?.courses||[])],item
 function removeFromCart(id){saveCart(cartIds().filter(x=>x!==id))}
 function clearCart(){saveCart([])}
 function itemWords(i){
-  const raw=[i.title,i.category,i.short,i.description,...(i.features||[])].filter(Boolean).join(' ').toLowerCase();
+  const raw=[i.title,i.category,i.short,i.description,...(i.features||[]),...(i.keywords||[])].filter(Boolean).join(' ').toLowerCase();
   return new Set(raw.replace(/[\\/•,:;()\[\]{}|_-]+/g,' ').split(/\s+/).filter(x=>x.length>2));
 }
 function recommendItems(baseItems,limit=4){
@@ -150,6 +150,8 @@ function recommendItems(baseItems,limit=4){
     let score=0;
     if((baseItems||[]).some(b=>b.category&&x.category&&b.category.toLowerCase()===x.category.toLowerCase()))score+=6;
     itemWords(x).forEach(w=>{if(baseWords.has(w))score+=1});
+    const baseKeywords=new Set((baseItems||[]).flatMap(b=>(b.keywords||[]).map(k=>String(k).trim().toLowerCase())).filter(Boolean));
+    (x.keywords||[]).forEach(k=>{if(baseKeywords.has(String(k).trim().toLowerCase()))score+=8});
     if(x.status==='featured')score+=2;if(x.status==='new')score+=1;
     return {x,score};
   }).filter(v=>v.score>0).sort((a,b)=>b.score-a.score).slice(0,limit).map(v=>v.x);
