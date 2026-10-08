@@ -1,1 +1,1 @@
-Trigger deployment for customer names, customer database backend, sales counts, resettable stats, and cart recommendations.
+Trigger deployment for homepage category patterns, cart recommendations, WhatsApp contact, USD consultation prices, sale styling, and admin date formatting.
