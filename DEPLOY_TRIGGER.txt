@@ -1,1 +1,1 @@
-Trigger deployment for admin cache invalidation, immediate item updates, and restored email sender configuration.
+Trigger deployment for mobile recovery polish, logo tick animation fix, and faster recovery verification.
