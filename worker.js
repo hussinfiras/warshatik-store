@@ -18,6 +18,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE items ADD COLUMN iraq_only INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS consultation_tickets(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,customer_name TEXT NOT NULL,contact_method TEXT NOT NULL,contact_value TEXT,scheduled_date TEXT NOT NULL,consultation_type TEXT NOT NULL,amount_iqd REAL NOT NULL,status TEXT NOT NULL DEFAULT 'issued',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
+  try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN amount_usd REAL NOT NULL DEFAULT 0`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   try{await db.exec(`ALTER TABLE orders ADD COLUMN customer_name TEXT NOT NULL DEFAULT ''`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
@@ -113,12 +114,12 @@ export default{async fetch(req,env){
     const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
     if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
     try{
-      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
+      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,amount_usd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
       if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
       return json({ok:true,ticket:t});
     }catch(e){
       await ensureInit(env.DB);
-      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
+      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,amount_usd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
       if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
       return json({ok:true,ticket:t});
     }
@@ -140,6 +141,8 @@ export default{async fetch(req,env){
       news_items:Array.isArray(s.news_items)?s.news_items:[],
       home_banners:Array.isArray(s.home_banners)?s.home_banners:[],
       digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',
+      home_card_images:s.home_card_images||{},
+      consultation_prices:s.consultation_prices||{individual:{iqd:20000,usd:15},supervision:{iqd:100000,usd:75}},
       show_courses:s.show_courses!==false,
       show_products:s.show_products!==false,
       show_consultations:s.show_consultations!==false,
@@ -231,7 +234,7 @@ export default{async fetch(req,env){
     const expectedAdminKey=String(env.ADMIN_KEY||'').trim();const providedAdminKey=String(b.admin_key||'').trim();if(!expectedAdminKey||providedAdminKey!==expectedAdminKey)return json({error:'Unauthorized'},401);
     if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
     if(b.action==='save-settings'){
-      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections'];
+      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices'];
       const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
       await putSettings(env.DB,clean);await clearStoreCaches(origin);
       return json({ok:true,settings:await getSettings(env.DB)});
@@ -280,12 +283,13 @@ export default{async fetch(req,env){
     if(b.action==='create-consultation-ticket'){
       const p=b.payload||{},name=String(p.customer_name||'').trim(),method=String(p.contact_method||'').trim(),value=String(p.contact_value||'').trim(),date=String(p.scheduled_date||'').trim(),type=String(p.consultation_type||'individual');
       if(!name||!method||!date)return json({error:'الاسم وطريقة التواصل والتاريخ مطلوبة.'},400);
-      const amount=type==='supervision'?100000:20000;
+      const s=await getSettings(env.DB),prices=s.consultation_prices||{individual:{iqd:20000,usd:15},supervision:{iqd:100000,usd:75}},price=prices[type]||prices.individual||{};
+      const amount=Number(price.iqd||0),amountUsd=Number(price.usd||0);
       let code='',exists=true;for(let i=0;i<8&&exists;i++){code=random10DigitCode();exists=!!(await env.DB.prepare('SELECT 1 x FROM consultation_tickets WHERE code=?').bind(code).first());}
       if(exists)return json({error:'تعذر إنشاء رمز فريد. حاول مرة أخرى.'},500);
       const id=crypto.randomUUID();
-      await env.DB.prepare('INSERT INTO consultation_tickets(id,code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,status) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,code,name,method,value,date,type,amount,'issued').run();
-      return json({ok:true,ticket:{id,code,customer_name:name,contact_method:method,contact_value:value,scheduled_date:date,consultation_type:type,amount_iqd:amount,status:'issued'}});
+      await env.DB.prepare('INSERT INTO consultation_tickets(id,code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,amount_usd,status) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,code,name,method,value,date,type,amount,amountUsd,'issued').run();
+      return json({ok:true,ticket:{id,code,customer_name:name,contact_method:method,contact_value:value,scheduled_date:date,consultation_type:type,amount_iqd:amount,amount_usd:amountUsd,status:'issued'}});
     }
     if(b.action==='list-consultation-tickets'){
       const {results}=await env.DB.prepare('SELECT * FROM consultation_tickets ORDER BY created_at DESC LIMIT 200').all();
@@ -311,7 +315,7 @@ export default{async fetch(req,env){
 
   if(u.pathname==='/api/admin/settings'&&req.method==='POST'){
     const b=await req.json();
-    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections'];
+    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices'];
     const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
     await putSettings(env.DB,clean);await clearStoreCaches(origin);
     return json({ok:true,settings:await getSettings(env.DB)});
