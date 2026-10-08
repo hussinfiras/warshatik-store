@@ -1,1 +1,1 @@
-Trigger deployment for sale price layout and fresh product status updates.
+Trigger deployment for product detail loading and simplified free label.
