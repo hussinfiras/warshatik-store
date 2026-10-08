@@ -1,1 +1,1 @@
-Trigger deployment for email timeout handling and recovery/checkout delivery diagnostics.
+Trigger deployment for customer names, customer database backend, sales counts, resettable stats, and cart recommendations.
