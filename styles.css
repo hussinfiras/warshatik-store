@@ -38,3 +38,7 @@
 .system-health>div{border:1px solid #ece5f2;border-radius:12px;padding:10px;background:#fbf9fd;display:flex;justify-content:space-between;gap:8px}
 .health-ok{color:#147a4d}.health-bad{color:#b42334}
 @media(max-width:650px){.system-health{grid-template-columns:1fr}}
+
+.dashboard-head{margin-bottom:4px}.dashboard-head h2{margin:0}.danger-soft{border-color:#f1c6ca;color:#a52d39;background:#fff5f6}.lifetime-card{border-color:#d9caec;background:#fbf8ff}
+#customerSearch{width:100%;margin-top:14px}.customer-row{cursor:pointer}.customer-row:hover{background:#faf7fd}
+.customer-detail{margin-top:16px}.purchase-group{border:1px solid #e8e2ee;border-radius:14px;padding:14px;margin-top:10px;background:#fbf9fd}.purchase-group h4{margin:0 0 7px}.purchase-line{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #eee}.purchase-line:first-of-type{border-top:0}.free-purchase{color:#168052;font-weight:800}
