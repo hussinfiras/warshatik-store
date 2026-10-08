@@ -29,3 +29,7 @@
 .section-manager-row:first-child{border-top:0}
 .section-manager-row input{min-width:0}
 @media(max-width:760px){.section-manager-row{grid-template-columns:1fr}.section-manager-row button{width:100%}}
+
+.section-items{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;padding-top:5px}
+.section-item-edit{border:1px solid #e2d5ef;background:#fff;color:#6f42a7;border-radius:10px;padding:6px 9px;font:700 11px Cairo,sans-serif;cursor:pointer}
+.section-item-edit:hover{background:#f4edfb}
