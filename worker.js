@@ -34,6 +34,11 @@ function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text
 async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
 function isAdmin(req,env){const expected=String(env.ADMIN_KEY||'').trim();const provided=String(req.headers.get('x-admin-key')||'').trim();return !!expected&&provided===expected}
+async function clearStoreCaches(origin){
+  const cache=globalThis.caches?.default;if(!cache)return;
+  try{await cache.delete(new Request(origin+'/api/catalog-cache'))}catch{}
+  try{await cache.delete(new Request(origin+'/api/storefront-cache'))}catch{}
+}
 function extFrom(name,type){const m=(name||'').match(/\.([a-zA-Z0-9]{1,8})$/);if(m)return m[1].toLowerCase();const map={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/zip':'zip','application/pdf':'pdf','text/plain':'txt'};return map[type]||'bin'}
 function cleanName(name){return (name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').slice(0,90)}
 function normEmail(v){return String(v||'').trim().toLowerCase()}
@@ -42,7 +47,8 @@ function randomToken(bytes=32){const a=new Uint8Array(bytes);crypto.getRandomVal
 function random10DigitCode(){const a=new Uint32Array(1);crypto.getRandomValues(a);return String(1000000000+(a[0]%9000000000)).padStart(10,'0')}
 async function hashText(v){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function sendEmail(env,to,subject,html){
-  if(!env.RESEND_API_KEY||!env.EMAIL_FROM)return {sent:false,reason:'Email provider not configured'};
+  if(!env.RESEND_API_KEY)return {sent:false,reason:'RESEND_API_KEY missing in Cloudflare Worker'};
+  if(!env.EMAIL_FROM)return {sent:false,reason:'EMAIL_FROM missing in Cloudflare Worker'};
   const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html})});
   if(!r.ok){let detail='';try{const x=await r.json();detail=x.message||x.name||''}catch{}return {sent:false,reason:`Email HTTP ${r.status}${detail?': '+detail:''}`};}
   return {sent:true};
@@ -85,8 +91,10 @@ export default{async fetch(req,env){
   if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
 
   if(u.pathname==='/api/storefront'&&req.method==='GET'){
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/storefront-cache'),adminRequest=isAdmin(req,env);
+    if(cache&&!adminRequest){const hit=await cache.match(cacheKey);if(hit)return hit}
     const s=await getSettings(env.DB);
-    return json({
+    const response=json({
       home_title:s.home_title||'حوّل أفكارك الإلكترونية إلى مشاريع حقيقية.',
       home_subtitle:s.home_subtitle||'دورات عملية، أكواد Arduino وESP32، ملفات مشاريع واستشارات شخصية تساعدك تتعلم وتبني مشروعك بطريقة واضحة.',
       home_image:s.home_image||'',
@@ -102,18 +110,20 @@ export default{async fetch(req,env){
         {id:'courses',name:'الدورات',type:'course',visible:s.show_courses!==false},
         {id:'consultations',name:'الاستشارات',type:'consultations',visible:s.show_consultations!==false}
       ]
-    },200,{'cache-control':'public, max-age=30, s-maxage=60'});
+    },200,adminRequest?{'cache-control':'no-store'}:{'cache-control':'public, max-age=15, s-maxage=30'});
+    if(cache&&!adminRequest)await cache.put(cacheKey,response.clone());
+    return response;
   }
 
   if(u.pathname==='/api/catalog'&&req.method==='GET'){
-    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache');
-    if(cache){
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache'),adminRequest=isAdmin(req,env);
+    if(cache&&!adminRequest){
       const hit=await cache.match(cacheKey);
       if(hit)return hit;
     }
     const {results}=await env.DB.prepare('SELECT * FROM items ORDER BY sort_order,id').all();
-    const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row),items:results.map(row)},200,{'cache-control':'public, max-age=30, s-maxage=60, stale-while-revalidate=300'});
-    if(cache)await cache.put(cacheKey,response.clone());
+    const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row),items:results.map(row)},200,adminRequest?{'cache-control':'no-store'}:{'cache-control':'public, max-age=15, s-maxage=30, stale-while-revalidate=60'});
+    if(cache&&!adminRequest)await cache.put(cacheKey,response.clone());
     return response;
   }
 
@@ -184,7 +194,7 @@ export default{async fetch(req,env){
     if(b.action==='save-settings'){
       const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections'];
       const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
-      await putSettings(env.DB,clean);
+      await putSettings(env.DB,clean);await clearStoreCaches(origin);
       return json({ok:true,settings:await getSettings(env.DB)});
     }
     if(b.action==='stats'){
@@ -231,7 +241,7 @@ export default{async fetch(req,env){
     const b=await req.json();
     const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections'];
     const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
-    await putSettings(env.DB,clean);
+    await putSettings(env.DB,clean);await clearStoreCaches(origin);
     return json({ok:true,settings:await getSettings(env.DB)});
   }
 
@@ -272,11 +282,11 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.active===false?0:1,x.sort_order||0).run();return json({ok:true});
+    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.active===false?0:1,x.sort_order||0).run();await clearStoreCaches(origin);return json({ok:true});
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
-    const id=decodeURIComponent(u.pathname.split('/').pop()),old=await env.DB.prepare('SELECT images,files FROM items WHERE id=?').bind(id).first();if(env.MEDIA&&old){for(const a of [...safeParse(old.images),...safeParse(old.files)])if(a&&a.key)await env.MEDIA.delete(a.key);}await env.DB.prepare('DELETE FROM items WHERE id=?').bind(id).run();return json({ok:true});
+    const id=decodeURIComponent(u.pathname.split('/').pop()),old=await env.DB.prepare('SELECT images,files FROM items WHERE id=?').bind(id).first();if(env.MEDIA&&old){for(const a of [...safeParse(old.images),...safeParse(old.files)])if(a&&a.key)await env.MEDIA.delete(a.key);}await env.DB.prepare('DELETE FROM items WHERE id=?').bind(id).run();await clearStoreCaches(origin);return json({ok:true});
   }
   return json({error:'Not found'},404);
 }};
