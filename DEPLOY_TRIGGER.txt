@@ -1,1 +1,1 @@
-Force deploy: run Worker before static assets to eliminate stale homepage HTML.
+Trigger deployment for dynamic homepage category card rebuild and faster news rendering.
