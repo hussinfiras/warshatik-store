@@ -54,18 +54,17 @@ async function sendEmail(env,to,subject,html){
   try{
     const r=await fetch('https://api.resend.com/emails',{
       method:'POST',
-      headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},
+      headers:{authorization:'Bearer '+env.RESEND_API_KEY,'content-type':'application/json'},
       body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html}),
       signal:controller.signal
     });
     if(!r.ok){
       let detail='';try{const x=await r.json();detail=x.message||x.name||''}catch{}
-      return {sent:false,reason:`Email HTTP ${r.status}${detail?': '+detail:''}`};
+      return {sent:false,reason:'Email HTTP '+r.status+(detail?': '+detail:'')};
     }
-    let id='';try{const x=await r.json();id=x.id||''}catch{}
-    return {sent:true,id};
+    return {sent:true};
   }catch(e){
-    return {sent:false,reason:e?.name==='AbortError'?'Email provider timeout':'Email network error: '+(e?.message||'unknown error')};
+    return {sent:false,reason:e&&e.name==='AbortError'?'Email provider timeout':'Email network error'};
   }finally{clearTimeout(timer)}
 }
 async function makeDownloadLinks(env,db,orderId,itemId,origin){
