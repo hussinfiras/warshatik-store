@@ -1,1 +1,1 @@
-Trigger deployment for forced centered category titles and fresh category background image loading.
+Force store redeploy for non-cached homepage category card build 20261008r2.
