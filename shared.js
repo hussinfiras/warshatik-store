@@ -199,6 +199,27 @@ function setupHomeQuickCards(){
   window.storefrontReady?.then(renderHomeQuickCards);
   window.storefrontRefresh?.then(fresh=>{if(fresh)renderHomeQuickCards(fresh)});
 }
+function renderHomeCatalogSections(){
+  if(document.body?.dataset?.page!=='home')return;
+  const productSection=document.getElementById('homeProductsSection');
+  const courseSection=document.getElementById('homeCoursesSection');
+  const productGrid=document.getElementById('homeProductsGrid');
+  const courseGrid=document.getElementById('homeCoursesGrid');
+  if(!productGrid||!courseGrid)return;
+  const products=(W?.products||[]).filter(x=>x.active&&isItemSectionVisible(x)).slice(0,3);
+  const courses=(W?.courses||[]).filter(x=>x.active&&isItemSectionVisible(x)).slice(0,3);
+  if(productSection)productSection.hidden=window.storeVisibility.show_products===false||!products.length;
+  if(courseSection)courseSection.hidden=window.storeVisibility.show_courses===false||!courses.length;
+  productGrid.innerHTML=products.map(card).join('');
+  courseGrid.innerHTML=courses.map(card).join('');
+  reveal();
+}
+function setupHomeCatalogSections(){
+  if(document.body?.dataset?.page!=='home')return;
+  Promise.all([window.catalogReady,window.storefrontReady]).then(()=>renderHomeCatalogSections());
+  window.catalogRefresh?.then(()=>renderHomeCatalogSections());
+  window.storefrontRefresh?.then(()=>renderHomeCatalogSections());
+}
 function setupAmbientElectronics(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
   if(matchMedia('(pointer:coarse)').matches||innerWidth<700){document.documentElement.classList.add('fx-mobile');return;}
@@ -216,8 +237,8 @@ function setupAmbientElectronics(){
   }
 }
 
-function setup(){applyWarshaLogo();setupWarshaLoader();setupHomeQuickCards();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
-function reveal(){const els=$('.reveal:not(.visible)');if(!('IntersectionObserver' in window)){els.forEach(x=>x.classList.add('visible'));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.05});els.forEach(x=>o.observe(x))}window.reveal=reveal;
+function setup(){applyWarshaLogo();setupWarshaLoader();setupHomeQuickCards();setupHomeCatalogSections();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
+function reveal(){const els=$('.reveal:not(.visible)');if(!els.length)return;if(!('IntersectionObserver' in window)||matchMedia('(pointer:coarse)').matches||innerWidth<700){els.forEach(x=>x.classList.add('visible'));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.05});els.forEach(x=>o.observe(x))}window.reveal=reveal;
 function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.status==='sale'&&i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong class="${i.status==='sale'?'sale-current-price':''}">${i.status==='free'?'<span class="free-price"><b>مجاني</b></span>':money(i)}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
 async function renderListing(type,target,searchSelector){
   await window.catalogReady;await window.storefrontReady;
