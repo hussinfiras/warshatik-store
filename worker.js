@@ -19,6 +19,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE items ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS consultation_tickets(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,customer_name TEXT NOT NULL,contact_method TEXT NOT NULL,contact_value TEXT,scheduled_date TEXT NOT NULL,consultation_type TEXT NOT NULL,amount_iqd REAL NOT NULL,status TEXT NOT NULL DEFAULT 'issued',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN customer_name TEXT NOT NULL DEFAULT ''`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
@@ -171,7 +172,7 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/orders/create'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email),currency=String(b.currency||'IQD').toUpperCase();if(!validEmail(email))return json({error:'Invalid email'},400);
+    const b=await req.json(),name=String(b.name||'').trim(),email=normEmail(b.email),currency=String(b.currency||'IQD').toUpperCase();if(name.length<2)return json({error:'Name is required'},400);if(!validEmail(email))return json({error:'Invalid email'},400);
     const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
     const vis=await getSettings(env.DB),sections=Array.isArray(vis.sections)?vis.sections:[];let total=0,selected=[];
     for(const id of ids){
@@ -187,7 +188,7 @@ export default{async fetch(req,env){
     if(!selected.length)return json({error:'No purchasable items'},400);
     const orderId='WT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
     const freeOrder=total===0;
-    await env.DB.prepare("INSERT INTO orders(id,email,currency,total,payment_status,payment_reference,paid_at) VALUES(?,?,?,?,?,?,?)").bind(orderId,email,currency,total,freeOrder?'paid':'pending',freeOrder?'FREE':null,freeOrder?new Date().toISOString():null).run();
+    await env.DB.prepare("INSERT INTO orders(id,email,customer_name,currency,total,payment_status,payment_reference,paid_at) VALUES(?,?,?,?,?,?,?,?)").bind(orderId,email,name,currency,total,freeOrder?'paid':'pending',freeOrder?'FREE':null,freeOrder?new Date().toISOString():null).run();
     for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
     let mail={sent:false},downloads=[];if(freeOrder){
       mail=await sendPurchaseEmail(env,env.DB,orderId,origin);
@@ -241,12 +242,40 @@ export default{async fetch(req,env){
       return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},admin_key:!!env.ADMIN_KEY});
     }
     if(b.action==='stats'){
-      const paid=await env.DB.prepare("SELECT COUNT(*) orders,COUNT(DISTINCT email) customers FROM orders WHERE payment_status='paid'").first();
+      const s=await getSettings(env.DB),resetAt=s.stats_reset_at||'1970-01-01T00:00:00Z';
+      const paid=await env.DB.prepare("SELECT COUNT(*) orders,COUNT(DISTINCT email) customers FROM orders WHERE payment_status='paid' AND datetime(COALESCE(paid_at,created_at))>=datetime(?)").bind(resetAt).first();
       const pending=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='pending'").first();
-      const units=await env.DB.prepare("SELECT COUNT(*) c FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid'").first();
+      const units=await env.DB.prepare("SELECT COUNT(*) c FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' AND datetime(COALESCE(o.paid_at,o.created_at))>=datetime(?)").bind(resetAt).first();
       const {results:revenue}=await env.DB.prepare("SELECT currency,SUM(total) total FROM orders WHERE payment_status='paid' GROUP BY currency").all();
-      const {results:top}=await env.DB.prepare("SELECT oi.item_id,oi.title,COUNT(*) sold,SUM(oi.price) revenue,o.currency FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY oi.item_id,oi.title,o.currency ORDER BY sold DESC LIMIT 10").all();
-      return json({paid_orders:Number(paid?.orders||0),customers:Number(paid?.customers||0),pending_orders:Number(pending?.c||0),units_sold:Number(units?.c||0),revenue:revenue||[],top_products:top||[]});
+      const {results:periodRevenue}=await env.DB.prepare("SELECT currency,SUM(total) total FROM orders WHERE payment_status='paid' AND datetime(COALESCE(paid_at,created_at))>=datetime(?) GROUP BY currency").bind(resetAt).all();
+      const {results:top}=await env.DB.prepare("SELECT oi.item_id,oi.title,COUNT(*) sold FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' AND datetime(COALESCE(o.paid_at,o.created_at))>=datetime(?) GROUP BY oi.item_id,oi.title ORDER BY sold DESC LIMIT 10").bind(resetAt).all();
+      const {results:itemSales}=await env.DB.prepare("SELECT oi.item_id,COUNT(*) sold FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.payment_status='paid' GROUP BY oi.item_id").all();
+      return json({paid_orders:Number(paid?.orders||0),customers:Number(paid?.customers||0),pending_orders:Number(pending?.c||0),units_sold:Number(units?.c||0),revenue:revenue||[],period_revenue:periodRevenue||[],top_products:top||[],item_sales:itemSales||[],reset_at:resetAt});
+    }
+    if(b.action==='reset-stats'){
+      const now=new Date().toISOString();await putSettings(env.DB,{stats_reset_at:now});return json({ok:true,reset_at:now});
+    }
+    if(b.action==='customers'){
+      const q=String(b.payload?.q||'').trim().toLowerCase(),like='%'+q+'%';
+      const {results}=await env.DB.prepare(`SELECT o.email,
+        COALESCE((SELECT o2.customer_name FROM orders o2 WHERE o2.email=o.email AND TRIM(COALESCE(o2.customer_name,''))<>'' ORDER BY o2.created_at DESC LIMIT 1),'—') customer_name,
+        COUNT(*) purchases,
+        SUM(CASE WHEN o.currency='IQD' THEN o.total ELSE 0 END) total_iqd,
+        SUM(CASE WHEN o.currency='USD' THEN o.total ELSE 0 END) total_usd,
+        MAX(COALESCE(o.paid_at,o.created_at)) last_purchase
+        FROM orders o
+        WHERE o.payment_status='paid' AND (?='' OR LOWER(o.email) LIKE ? OR LOWER(COALESCE(o.customer_name,'')) LIKE ?)
+        GROUP BY o.email ORDER BY datetime(last_purchase) DESC LIMIT 500`).bind(q,like,like).all();
+      return json({customers:results||[]});
+    }
+    if(b.action==='customer-purchases'){
+      const email=normEmail(b.payload?.email||'');if(!validEmail(email))return json({error:'Invalid email'},400);
+      const {results}=await env.DB.prepare(`SELECT o.id order_id,o.customer_name,o.email,o.currency,o.total,o.payment_status,o.created_at,o.paid_at,
+        oi.item_id,oi.title,oi.price,i.type,i.status
+        FROM orders o JOIN order_items oi ON oi.order_id=o.id LEFT JOIN items i ON i.id=oi.item_id
+        WHERE o.email=? AND o.payment_status='paid'
+        ORDER BY datetime(COALESCE(o.paid_at,o.created_at)) DESC,o.id`).bind(email).all();
+      return json({purchases:results||[]});
     }
     if(b.action==='create-consultation-ticket'){
       const p=b.payload||{},name=String(p.customer_name||'').trim(),method=String(p.contact_method||'').trim(),value=String(p.contact_value||'').trim(),date=String(p.scheduled_date||'').trim(),type=String(p.consultation_type||'individual');
