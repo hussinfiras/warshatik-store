@@ -132,7 +132,7 @@ export default{async fetch(req,env){
       if(!it||!it.active||['sold','coming'].includes(it.status))continue;
       if(it.type==='course'&&vis.show_courses===false)continue;
       if(it.type==='product'&&vis.show_products===false)continue;
-      const custom=sections.find(s=>s&&s.type===it.type);if(custom&&custom.visible===false)continue;
+      const custom=sections.find(s=>s&&s.type===it.type);if(custom&&custom.visible===false)continue;if(String(it.type||'').startsWith('section:')&&!custom)continue;
       if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);
       const price=it.status==='free'?0:(currency==='USD'?Number(it.price_usd):Number(it.price_iqd));
       total+=price;selected.push({...it,price});
