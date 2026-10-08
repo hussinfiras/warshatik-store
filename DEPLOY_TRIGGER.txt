@@ -1,1 +1,1 @@
-Trigger deployment for cleaner consultation modal without top stepper.
+Trigger deployment for search, configurable sections, keywords, and free checkout.
