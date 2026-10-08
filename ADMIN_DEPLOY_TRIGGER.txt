@@ -1,1 +1,1 @@
-Trigger admin deployment for auto-saving homepage category backgrounds.
+Trigger admin deployment for verified category background saving.
