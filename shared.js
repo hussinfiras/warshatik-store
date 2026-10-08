@@ -80,7 +80,7 @@ function setupWarshaLoader(){
   document.body.appendChild(overlay);
   armWarshaTick(overlay);
   const started=performance.now();
-  const minVisible=(matchMedia('(pointer:coarse)').matches||innerWidth<700)?2350:1800;
+  const minVisible=(matchMedia('(pointer:coarse)').matches||innerWidth<700)?2850:1800;
   const hide=()=>{const wait=Math.max(0,minVisible-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),380)},wait)};
   if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
 }
