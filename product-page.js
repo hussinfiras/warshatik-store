@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     let data=window.WARSHA_DATA||{products:[],courses:[]};
     let params=new URLSearchParams(location.search);
     const wantedId=params.get('id');
-    let allFast=[...(data.products||[]),...(data.courses||[])];
+    let allFast=window.allCatalogItems?window.allCatalogItems():[...(data.products||[]),...(data.courses||[]),...(data.items||[])];
     if(!allFast.some(x=>x.id===wantedId)&&window.catalogRefresh){
       const fresh=await window.catalogRefresh;
       if(fresh)data=window.WARSHA_DATA=fresh;
@@ -14,14 +14,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
     params=new URLSearchParams(location.search);
     const id=params.get('id');
     const type=params.get('type')||'product';
-    const all=[...(data.products||[]),...(data.courses||[])];
+    const all=window.allCatalogItems?window.allCatalogItems():[...(data.products||[]),...(data.courses||[]),...(data.items||[])];
     const item=all.find(x=>x.id===id);
 
     if(!item){
       root.innerHTML='<div class="empty-card"><h1>المنتج غير موجود</h1><p>قد يكون الرابط قديماً أو تم إخفاء المنتج.</p><a class="btn btn-primary" href="products.html">الرجوع للمنتجات</a></div>';
       return;
     }
-    if((item.type==='product'&&storefront.show_products===false)||(item.type==='course'&&storefront.show_courses===false)){
+    if((item.type==='product'&&storefront.show_products===false)||(item.type==='course'&&storefront.show_courses===false)||!window.isItemSectionVisible?.(item)){
       location.replace('index.html');return;
     }
 
@@ -52,14 +52,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <span class="category">${item.category||''}</span>
       <h1>${item.title}</h1>
       <p class="desc">${item.description||''}</p>
-      <div class="detail-price">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${moneyLocal(item)}</div>
+      <div class="detail-price">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'مجاني':moneyLocal(item)}</div>
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
       ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
-      ${(item.files||[]).length?`<div class="download-note">يتضمن هذا المنتج ${item.files.length} ملف/ملفات رقمية. تصبح روابط التحميل متاحة بعد إكمال الدفع.</div>`:''}
+      ${(item.files||[]).length?`<div class="download-note">يتضمن هذا المنتج ${item.files.length} ملف/ملفات رقمية. ${item.status==='free'?'أدخل بريدك لإكمال الطلب واستلام الملفات مباشرة.':'تصبح روابط التحميل متاحة بعد إكمال الدفع.'}</div>`:''}
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px">
-        <button id="addCartBtn" class="btn btn-primary" ${disabled?'disabled style="opacity:.45;cursor:not-allowed"':''}>${blockedByRegion?'متاح داخل العراق فقط':(disabled?(item.status==='sold'?'غير متوفر حالياً':'قريباً'):'أضف للسلة')}</button>
-        <a class="btn btn-ghost" href="${type==='course'?'courses.html':'products.html'}">رجوع</a>
+        <button id="addCartBtn" class="btn btn-primary" ${disabled?'disabled style="opacity:.45;cursor:not-allowed"':''}>${blockedByRegion?'متاح داخل العراق فقط':(disabled?(item.status==='sold'?'غير متوفر حالياً':'قريباً'):(item.status==='free'?'احصل عليه مجاناً':'أضف للسلة'))}</button>
+        <a class="btn btn-ghost" href="${item.type==='course'?'courses.html':item.type==='product'?'products.html':'section.html?id='+encodeURIComponent((storefront.sections||[]).find(s=>s.type===item.type)?.id||'')}">رجوع</a>
       </div>
       <p id="cartMessage" style="color:#8055c2;font-weight:700;margin-top:12px"></p>
     </div>`;
