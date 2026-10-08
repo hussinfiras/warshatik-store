@@ -21,6 +21,9 @@ function render(){
       ${s.type!=='consultations'?'<button type="button" class="mini section-add-item">+ عنصر</button>':''}
       ${['products','courses','consultations'].includes(s.id)?'':'<button type="button" class="mini section-delete">حذف</button>'}
     </div>
+    <div class="section-items">
+      ${s.type==='consultations'?'':((window.allAdminItems?.()||[]).filter(x=>x.type===s.type).map(x=>'<button type="button" class="section-item-edit" data-item-id="'+x.id+'">'+x.title+'</button>').join('')||'<span class="hint">لا توجد عناصر في هذا القسم.</span>')}
+    </div>
   </div>`).join('');
   wrap.querySelectorAll('.section-manager-row').forEach(row=>{
     const i=Number(row.dataset.sectionIndex),s=list[i];
@@ -29,6 +32,7 @@ function render(){
     row.querySelector('.section-visible').addEventListener('change',e=>{s.visible=e.target.checked});
     row.querySelector('.section-add-item')?.addEventListener('click',()=>window.openEditor?.(s.type));
     row.querySelector('.section-delete')?.addEventListener('click',()=>{if(confirm('حذف هذا القسم من القائمة؟ العناصر لن تُحذف تلقائياً.')){list.splice(i,1);render()}});
+    row.querySelectorAll('.section-item-edit').forEach(b=>b.addEventListener('click',()=>window.editItem?.(s.type,b.dataset.itemId)));
   });
   window.refreshItemSectionOptions?.();
 }
@@ -61,6 +65,6 @@ const saveBtn=document.createElement('button');
 saveBtn.type='button';saveBtn.className='primary';saveBtn.id='saveStoreSections';saveBtn.textContent='حفظ الأقسام';
 q('.section-manager-box')?.appendChild(saveBtn);
 saveBtn.addEventListener('click',async()=>{saveBtn.disabled=true;try{await save()}catch(e){alert(e.message)}finally{saveBtn.disabled=false}});
-window.addEventListener('warsha:sections-loaded',()=>render());
+window.addEventListener('warsha:sections-loaded',()=>render());window.addEventListener('warsha:admin-catalog',()=>render());
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
 })();
