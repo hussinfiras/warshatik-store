@@ -1,1 +1,1 @@
-Trigger deployment for stable mobile loading, immediate product details, and refreshed store assets.
+Trigger deployment for reveal crash fix and restored homepage product/course sections.
