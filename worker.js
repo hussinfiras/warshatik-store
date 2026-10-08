@@ -208,7 +208,7 @@ export default{async fetch(req,env){
     if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
     if(t.status==='ended')return json({error:'انتهت الجلسة، حاول مرة أخرى.'},400);
     await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending' WHERE code=? AND status='issued'").bind(code).run();
-    return json({ok:true,payment_ready:false,code,amount_iqd:t.amount_iqd,message:'التذكرة جاهزة للدفع. سيتم ربطها ببوابة Wayl في مرحلة تفعيل الدفع النهائية.'});
+    return json({ok:true,payment_ready:false,code,amount_iqd:t.amount_iqd,amount_usd:t.amount_usd||0,message:'التذكرة جاهزة للدفع. سيتم ربطها ببوابة Wayl في مرحلة تفعيل الدفع النهائية.'});
   }
 
   if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
