@@ -110,6 +110,7 @@ function isItemSectionVisible(item){
   if(item.type==='course')return window.storeVisibility.show_courses!==false;
   if(item.type==='product')return window.storeVisibility.show_products!==false;
   const sec=(window.storeVisibility.sections||[]).find(s=>s.type===item.type);if(sec)return sec.visible!==false;
+  if(String(item.type||'').startsWith('section:'))return false;
   return true;
 }
 window.isItemSectionVisible=isItemSectionVisible;
@@ -124,7 +125,15 @@ function applyStoreVisibility(s={}){
   const defaults={products:s.show_products!==false,courses:s.show_courses!==false,consultations:s.show_consultations!==false};
   sections.forEach(sec=>{if(sec.id in defaults)defaults[sec.id]=sec.visible!==false});
   const rules=[['courses',defaults.courses],['products',defaults.products],['consultations',defaults.consultations]];
-  sections.forEach(sec=>{if(['products','courses','consultations'].includes(sec.id)){document.querySelectorAll('a[data-page="'+sec.id+'"],a[href="'+sec.id+'.html"]').forEach(el=>{el.textContent=sec.name||el.textContent})}});
+  sections.forEach(sec=>{
+    if(['products','courses','consultations'].includes(sec.id)){
+      document.querySelectorAll('a[data-page="'+sec.id+'"],a[href="'+sec.id+'.html"]').forEach(el=>{el.textContent=sec.name||el.textContent});
+      if(document.body?.dataset?.page===sec.id){
+        const kicker=document.querySelector('.page-hero .kicker');if(kicker)kicker.textContent=sec.name||kicker.textContent;
+        if(sec.description){const p=document.querySelector('.page-hero p');if(p)p.textContent=sec.description}
+      }
+    }
+  });
   for(const [page,show] of rules){
     document.querySelectorAll('a[data-page="'+page+'"],a[href="'+page+'.html"]').forEach(el=>{el.style.display=show?'':'none'});
     const bodyPage=document.body?.dataset?.page;
