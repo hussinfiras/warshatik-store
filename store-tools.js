@@ -3,11 +3,7 @@ const q=s=>document.querySelector(s);
 async function bridge(action,payload){
   const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
   if(!key)throw new Error('Admin API Key غير موجود');
-  const bases=[
-    (settings.apiBase||'https://warshatik.com/api').replace(/\/$/,''),
-    'https://warshatik.com/api',
-    'https://warshatik-store2.hussainfiras23.workers.dev/api'
-  ].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  const bases=['https://warshatik-store2.hussainfiras23.workers.dev/api'];
   let lastErr=null;
   for(const base of bases){
     const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
@@ -20,9 +16,9 @@ async function bridge(action,payload){
       });
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
-      settings.apiBase=base;settings.adminKey=key;
+      settings.apiBase='https://warshatik-store2.hussainfiras23.workers.dev/api';settings.adminKey=key;
       localStorage.setItem('wt_settings',JSON.stringify(settings));
-      if(q('#apiBase'))q('#apiBase').value=base;
+      if(q('#apiBase')){q('#apiBase').value='https://warshatik-store2.hussainfiras23.workers.dev/api';q('#apiBase').readOnly=true}
       return d;
     }catch(e){lastErr=e}
     finally{clearTimeout(timer)}
