@@ -1,4 +1,4 @@
-const STATUS={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',featured:'مميز',coming:'قريباً'};
+const STATUS={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',featured:'مميز',coming:'قريباً',free:'مجاني'};
 let initPromise=null;
 const SEED=[
 ['rfid-attendance','product','نظام RFID للحضور','Arduino',12000,9,15000,11.5,'new','جديد','كود كامل + مخطط توصيل + قائمة مكتبات + ملف شرح.','مشروع متكامل لبناء نظام حضور باستخدام Arduino وقارئ RFID.',['كود Arduino كامل','مخطط التوصيل','قائمة المكتبات','ملف شرح PDF'],[],[],'https://www.youtube.com/',1,10],
@@ -96,7 +96,12 @@ export default{async fetch(req,env){
       digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',
       show_courses:s.show_courses!==false,
       show_products:s.show_products!==false,
-      show_consultations:s.show_consultations!==false
+      show_consultations:s.show_consultations!==false,
+      sections:Array.isArray(s.sections)&&s.sections.length?s.sections:[
+        {id:'products',name:'المنتجات',type:'product',visible:s.show_products!==false},
+        {id:'courses',name:'الدورات',type:'course',visible:s.show_courses!==false},
+        {id:'consultations',name:'الاستشارات',type:'consultations',visible:s.show_consultations!==false}
+      ]
     },200,{'cache-control':'public, max-age=30, s-maxage=60'});
   }
 
@@ -107,7 +112,7 @@ export default{async fetch(req,env){
       if(hit)return hit;
     }
     const {results}=await env.DB.prepare('SELECT * FROM items ORDER BY sort_order,id').all();
-    const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row)},200,{'cache-control':'public, max-age=30, s-maxage=60, stale-while-revalidate=300'});
+    const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row),items:results.map(row)},200,{'cache-control':'public, max-age=30, s-maxage=60, stale-while-revalidate=300'});
     if(cache)await cache.put(cacheKey,response.clone());
     return response;
   }
@@ -121,10 +126,24 @@ export default{async fetch(req,env){
   if(u.pathname==='/api/orders/create'&&req.method==='POST'){
     const b=await req.json(),email=normEmail(b.email),currency=String(b.currency||'IQD').toUpperCase();if(!validEmail(email))return json({error:'Invalid email'},400);
     const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
-    const vis=await getSettings(env.DB);let total=0,selected=[];for(const id of ids){const it=await env.DB.prepare('SELECT id,type,title,price_iqd,price_usd,status,active,iraq_only FROM items WHERE id=?').bind(id).first();if(!it||!it.active||['sold','coming'].includes(it.status))continue;if(it.type==='course'&&vis.show_courses===false)continue;if(it.type==='product'&&vis.show_products===false)continue;if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);const price=currency==='USD'?Number(it.price_usd):Number(it.price_iqd);total+=price;selected.push({...it,price});}
-    if(!selected.length)return json({error:'No purchasable items'},400);const orderId='WT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
-    await env.DB.prepare('INSERT INTO orders(id,email,currency,total) VALUES(?,?,?,?)').bind(orderId,email,currency,total).run();for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
-    return json({ok:true,order_id:orderId,email,currency,total});
+    const vis=await getSettings(env.DB),sections=Array.isArray(vis.sections)?vis.sections:[];let total=0,selected=[];
+    for(const id of ids){
+      const it=await env.DB.prepare('SELECT id,type,title,price_iqd,price_usd,status,active,iraq_only FROM items WHERE id=?').bind(id).first();
+      if(!it||!it.active||['sold','coming'].includes(it.status))continue;
+      if(it.type==='course'&&vis.show_courses===false)continue;
+      if(it.type==='product'&&vis.show_products===false)continue;
+      const custom=sections.find(s=>s&&s.type===it.type);if(custom&&custom.visible===false)continue;
+      if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);
+      const price=it.status==='free'?0:(currency==='USD'?Number(it.price_usd):Number(it.price_iqd));
+      total+=price;selected.push({...it,price});
+    }
+    if(!selected.length)return json({error:'No purchasable items'},400);
+    const orderId='WT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+    const freeOrder=total===0;
+    await env.DB.prepare("INSERT INTO orders(id,email,currency,total,payment_status,payment_reference,paid_at) VALUES(?,?,?,?,?,?,?)").bind(orderId,email,currency,total,freeOrder?'paid':'pending',freeOrder?'FREE':null,freeOrder?new Date().toISOString():null).run();
+    for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
+    let mail={sent:false};if(freeOrder)mail=await sendPurchaseEmail(env,env.DB,orderId,origin);
+    return json({ok:true,order_id:orderId,email,currency,total,free:freeOrder,email_sent:mail.sent||false,email_reason:mail.reason||null});
   }
 
   if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
@@ -160,7 +179,7 @@ export default{async fetch(req,env){
     const expectedAdminKey=String(env.ADMIN_KEY||'').trim();const providedAdminKey=String(b.admin_key||'').trim();if(!expectedAdminKey||providedAdminKey!==expectedAdminKey)return json({error:'Unauthorized'},401);
     if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
     if(b.action==='save-settings'){
-      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations'];
+      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections'];
       const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
       await putSettings(env.DB,clean);
       return json({ok:true,settings:await getSettings(env.DB)});
@@ -207,7 +226,7 @@ export default{async fetch(req,env){
 
   if(u.pathname==='/api/admin/settings'&&req.method==='POST'){
     const b=await req.json();
-    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations'];
+    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections'];
     const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
     await putSettings(env.DB,clean);
     return json({ok:true,settings:await getSettings(env.DB)});
