@@ -8,7 +8,7 @@ if(cachedCatalog)W=window.WARSHA_DATA=cachedCatalog;
 window.catalogReady=Promise.resolve(W);
 window.catalogRefresh=(async()=>{try{const r=await fetch('/api/catalog?fresh=1',{cache:'no-store'});if(r.ok){const fresh=await r.json();W=window.WARSHA_DATA=fresh;saveCatalogCache(fresh);window.dispatchEvent(new CustomEvent('warsha:catalog-updated'));return fresh}}catch(e){console.warn('Using cached/fallback catalog',e)}return W})();
 const STOREFRONT_CACHE_KEY='warsha-storefront-v1';
-const STOREFRONT_FALLBACK={news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_courses:true,show_products:true,show_consultations:true,sections:[{id:'products',name:'المنتجات',type:'product',visible:true},{id:'courses',name:'الدورات',type:'course',visible:true},{id:'consultations',name:'الاستشارات',type:'consultations',visible:true}]};
+const STOREFRONT_FALLBACK={news_items:[],news_enabled:true,digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',home_card_images:{},consultation_prices:{individual:{iqd:20000,usd:15},supervision:{iqd:100000,usd:75}},show_courses:true,show_products:true,show_consultations:true,sections:[{id:'products',name:'المنتجات',type:'product',visible:true},{id:'courses',name:'الدورات',type:'course',visible:true},{id:'consultations',name:'الاستشارات',type:'consultations',visible:true}]};
 function readStorefrontCache(){try{return JSON.parse(localStorage.getItem(STOREFRONT_CACHE_KEY)||'null')}catch{return null}}
 function saveStorefrontCache(data){try{localStorage.setItem(STOREFRONT_CACHE_KEY,JSON.stringify(data))}catch{}}
 const cachedStorefront=readStorefrontCache();
