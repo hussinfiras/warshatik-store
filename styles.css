@@ -579,3 +579,27 @@ body[data-page="home"] .quick-card-v2::before{display:none!important}
   color:#17131d!important;
   background:rgba(255,255,255,.72)!important;
 }
+
+/* Homepage cards must never depend on scroll-reveal visibility */
+body[data-page="home"] .quick-grid{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:22px!important;
+}
+body[data-page="home"] .quick-card,
+body[data-page="home"] .quick-card-v2,
+body[data-page="home"] .home-catalog-section .product-card{
+  opacity:1!important;
+  transform:none!important;
+  visibility:visible!important;
+}
+body[data-page="home"] .home-catalog-section{
+  padding-top:34px!important;
+  padding-bottom:34px!important;
+}
+body[data-page="home"] .home-catalog-section .cards-grid{
+  min-height:0!important;
+}
+@media(max-width:900px){
+  body[data-page="home"] .quick-grid{grid-template-columns:1fr!important}
+}
