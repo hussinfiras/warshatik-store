@@ -1,1 +1,1 @@
-Trigger admin deployment for homepage card backgrounds, USD consultation pricing, and English date formatting.
+Trigger admin deployment for auto-saving homepage category backgrounds.
