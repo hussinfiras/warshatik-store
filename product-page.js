@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <span class="category">${item.category||''}</span>
       <h1>${item.title}</h1>
       <p class="desc">${item.description||''}</p>
-      <div class="detail-price">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'مجاني':moneyLocal(item)}</div>
+      <div class="detail-price">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b><small>بدون دفع</small></span>':moneyLocal(item)}</div>
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
       ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
