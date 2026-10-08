@@ -1,6 +1,6 @@
-const STATUS_TEXT={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',featured:'مميز',coming:'قريباً'};
+const STATUS_TEXT={normal:'عادي',new:'جديد',sale:'خصم',sold:'نفد',featured:'مميز',coming:'قريباً',free:'مجاني'};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-let products=[],courses=[],editing=null,currentImages=[],currentFiles=[],dragIndex=null;
+let products=[],courses=[],allItems=[],editing=null,currentImages=[],currentFiles=[],dragIndex=null;
 function readLocalJson(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch(e){console.warn('Bad local storage:',key,e);return null}}
 let consultations=readLocalJson('wt_consults')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
 let settings=readLocalJson('wt_settings')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik-store2.hussainfiras23.workers.dev/api',adminKey:''};
@@ -37,7 +37,7 @@ async function apiCall(path,opt={}){
 }
 async function uploadAsset(file,kind){const key=currentAdminKey();if(!key)throw new Error('تحقق من Admin API Key في الإعدادات');const itemId=editing||'draft';const headers={'content-type':file.type||'application/octet-stream','x-admin-key':key,'x-file-name':encodeURIComponent(file.name),'x-file-kind':kind,'x-item-id':itemId};const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});let data={};try{data=await r.json()}catch{}if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data}
 async function deleteAsset(key){if(!key)return;await apiCall('/uploads?key='+encodeURIComponent(key),{method:'DELETE'})}
-async function loadCatalog(){try{const d=await apiCall('/catalog',{method:'GET'});products=d.products||[];courses=d.courses||[];render()}catch(e){console.error(e);toast('تعذر الاتصال بقاعدة البيانات - تحقق من رابط API')}}
+async function loadCatalog(){try{const d=await apiCall('/catalog',{method:'GET'});products=d.products||[];courses=d.courses||[];allItems=d.items||[...products,...courses];render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}))}catch(e){console.error(e);toast('تعذر الاتصال بقاعدة البيانات - تحقق من رابط API')}}
 function rows(list){return list.map(x=>`<tr><td><strong>${x.title}</strong><br><small>${x.category}</small></td><td>${Number(x.price_iqd).toLocaleString()}</td><td>$${x.price_usd}</td><td><span class="${badge(x.status)}">${label(x)}</span></td><td><button class="mini" onclick="editItem('${x.type}','${x.id}')">تعديل</button> <button class="mini" onclick="delItem('${x.type}','${x.id}')">حذف</button></td></tr>`).join('')}
 function render(){const q=($('#search')?.value||'').toLowerCase();$('#productRows').innerHTML=rows(products.filter(x=>x.title.toLowerCase().includes(q)));$('#courseRows').innerHTML=rows(courses);$('#statProducts').textContent=products.length;$('#statCourses').textContent=courses.length;$('#statSold').textContent=[...products,...courses].filter(x=>x.status==='sold').length;$('#statActive').textContent=[...products,...courses].filter(x=>x.active).length;$('#recent').innerHTML=[...products,...courses].slice(0,5).map(x=>`<div class="recent"><strong>${x.title}</strong> — <span class="${badge(x.status)}">${label(x)}</span></div>`).join('')}
 function renderImages(){const wrap=$('#imageList');wrap.innerHTML=currentImages.map((img,i)=>`<div class="image-item" draggable="true" data-i="${i}"><img src="${img.url||''}" alt=""><small>${i===0?'★ الصورة الرئيسية':'اسحب للترتيب'}</small><button type="button" data-remove-image="${i}">حذف</button></div>`).join('');wrap.querySelectorAll('.image-item').forEach(el=>{el.addEventListener('dragstart',()=>{dragIndex=Number(el.dataset.i);el.classList.add('dragging')});el.addEventListener('dragend',()=>el.classList.remove('dragging'));el.addEventListener('dragover',e=>e.preventDefault());el.addEventListener('drop',e=>{e.preventDefault();const to=Number(el.dataset.i);if(dragIndex===null||dragIndex===to)return;const[m]=currentImages.splice(dragIndex,1);currentImages.splice(to,0,m);dragIndex=null;renderImages()})});wrap.querySelectorAll('[data-remove-image]').forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.removeImage),x=currentImages[i];if(!confirm('حذف هذه الصورة؟'))return;try{if(x?.key)await deleteAsset(x.key);currentImages.splice(i,1);renderImages();toast('تم حذف الصورة')}catch(e){alert(e.message)}})}
@@ -51,15 +51,18 @@ function syncSaleFields(){
   if(b)b.style.display=sale?'flex':'none';
 }
 
-function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#keywords').value=(item?.keywords||[]).join(', ');$('#digitalOnly').checked=item?.digitalOnly??true;$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();syncSaleFields();updateNetPreview();$('#modal').classList.add('open')}
-function editItem(type,id){const a=type==='course'?courses:products;openEditor(type,a.find(x=>x.id===id))}
+function refreshItemSectionOptions(selected){const sel=$('#itemSection');if(!sel)return;const secs=(window.wtStoreSections||[{id:'products',name:'المنتجات',type:'product'},{id:'courses',name:'الدورات',type:'course'}]).filter(s=>s.type!=='consultations');sel.innerHTML=secs.map(s=>`<option value="${s.type}">${s.name}</option>`).join('');if(selected&&[...sel.options].some(o=>o.value===selected))sel.value=selected}window.refreshItemSectionOptions=refreshItemSectionOptions;
+function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;refreshItemSectionOptions(item?.type||type);$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#keywords').value=(item?.keywords||[]).join(', ');$('#digitalOnly').checked=item?.digitalOnly??true;$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();syncSaleFields();updateNetPreview();$('#modal').classList.add('open')}
+function editItem(type,id){openEditor(type,allItems.find(x=>x.id===id)||[...products,...courses].find(x=>x.id===id))}
 async function delItem(type,id){if(!confirm('حذف؟'))return;try{await apiCall('/items/'+encodeURIComponent(id),{method:'DELETE'});await loadCatalog();toast('تم الحذف من المتجر')}catch(e){alert(e.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':e.message)}}
 function close(){ $('#modal').classList.remove('open') }
 function updateNetPreview(){
+  const free=$('#status')?.value==='free';
   const iqd=Number($('#price_iqd')?.value||0);
   const usd=Number($('#price_usd')?.value||0);
   const LOCAL_PCT=2.5, INTERNATIONAL_PCT=3.5, FIXED_IQD=600, IQD_PER_USD=1310;
   const fixedUsd=FIXED_IQD/IQD_PER_USD;
+  if(free){if($('#netIQD'))$('#netIQD').textContent='مجاني — لا توجد رسوم Wayl';if($('#netUSD'))$('#netUSD').textContent='مجاني — لا توجد رسوم Wayl';return}
   if($('#netIQD')){
     const fee=iqd?iqd*LOCAL_PCT/100+FIXED_IQD:0;
     const net=Math.max(0,iqd-fee);
@@ -79,7 +82,7 @@ window.updateNetPreview=updateNetPreview;
 
 $('#price_iqd')?.addEventListener('input',updateNetPreview);
 $('#price_usd')?.addEventListener('input',updateNetPreview);
-$('#status').addEventListener('change',e=>{setStatusText(e.target.value,true);syncSaleFields()});
+$('#status').addEventListener('change',e=>{setStatusText(e.target.value,true);syncSaleFields();updateNetPreview()});
 $('#editStatusText').addEventListener('click',()=>{
   const input=$('#statusText');
   input.readOnly=!input.readOnly;
@@ -137,7 +140,7 @@ $('#fileInput').addEventListener('change',async e=>{
 
 $('#form').onsubmit=async e=>{
   e.preventDefault();
-  const type=$('#editType').value;
+  const type=$('#itemSection')?.value||$('#editType').value;
   const x={
     id:editing,type,title:$('#title').value,category:$('#category').value,
     price_iqd:Number($('#price_iqd').value),price_usd:Number($('#price_usd').value),
@@ -213,3 +216,5 @@ $('#sendTestEmail').onclick=async()=>{
 loadCatalog();
 
 window.openEditor=openEditor;window.editItem=editItem;window.delItem=delItem;
+
+window.loadCatalog=loadCatalog;window.allAdminItems=()=>allItems;
