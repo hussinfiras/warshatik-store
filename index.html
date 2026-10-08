@@ -27,11 +27,17 @@ document.addEventListener('DOMContentLoaded',async()=>{
   const banners=Array.isArray(s.home_banners)?s.home_banners.filter(x=>x&&(x.image||x.title||x.subtitle)):[];
   const section=document.getElementById('homeBannerSection'),stage=document.getElementById('homeBannerStage'),dots=document.getElementById('bannerDots'),fallback=document.getElementById('fallbackHero');
   const newsEnabled=s.news_enabled!==false;
-  const quickImages=s.home_card_images||{};
-  document.querySelectorAll('[data-quick-card]').forEach(card=>{
-    const url=quickImages[card.dataset.quickCard]||'';
-    if(url){card.classList.add('has-custom-bg');card.style.setProperty('--quick-bg','url("'+String(url).replace(/"/g,'%22')+'")')}
-  });
+  const applyQuickImages=settings=>{
+    const quickImages=settings?.home_card_images||{};
+    document.querySelectorAll('[data-quick-card]').forEach(card=>{
+      const url=quickImages[card.dataset.quickCard]||'';
+      card.classList.toggle('has-custom-bg',!!url);
+      if(url)card.style.setProperty('--quick-bg','url("'+String(url).replace(/"/g,'%22')+'")');
+      else card.style.removeProperty('--quick-bg');
+    });
+  };
+  applyQuickImages(s);
+  window.addEventListener('warsha:storefront-updated',e=>applyQuickImages(e.detail),{once:true});
   if(!newsEnabled){
     fallback.hidden=false;
     const ft=document.getElementById('fallbackTitle'),fs=document.getElementById('fallbackSubtitle');
