@@ -1,1 +1,1 @@
-Trigger deployment for mobile recovery polish, logo tick animation fix, and faster recovery verification.
+Trigger deployment for faster complete logo animation and aligned free product pricing.
