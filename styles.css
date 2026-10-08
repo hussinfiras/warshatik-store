@@ -398,3 +398,6 @@ body[data-page="home"] .quick-card{
 .free-mini{display:inline-block;color:#118454;font-weight:900}
 .free-downloads{margin-top:16px;display:flex;flex-direction:column;gap:9px}
 .free-download-link{width:max-content;max-width:100%}
+
+/* Mobile Safari: keep logo tick pieces fully hidden until their own draw stage */
+.wt-tick-part{opacity:0}
