@@ -230,7 +230,18 @@ q('#homeImageInput')?.addEventListener('change',async e=>{
 ].forEach(([uploadId,inputId,itemId])=>{
   q('#'+uploadId)?.addEventListener('change',async e=>{
     const file=e.target.files?.[0];e.target.value='';if(!file)return;
-    try{const d=await uploadImage(file,itemId);q('#'+inputId).value=d.url||'';toast('تم رفع صورة خلفية القسم')}catch(err){alert(err.message)}
+    try{
+      const d=await uploadImage(file,itemId);
+      q('#'+inputId).value=d.url||'';
+      const images={
+        products:q('#quickProductsImage')?.value.trim()||'',
+        courses:q('#quickCoursesImage')?.value.trim()||'',
+        consultations:q('#quickConsultationsImage')?.value.trim()||''
+      };
+      const saved=await bridge('save-settings',{home_card_images:images});
+      window.wtStoreSettings={...(window.wtStoreSettings||{}),home_card_images:saved.settings?.home_card_images||images};
+      toast('تم رفع وحفظ خلفية القسم');
+    }catch(err){alert(err.message)}
   });
 });
 
