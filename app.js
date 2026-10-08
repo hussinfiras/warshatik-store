@@ -4,16 +4,16 @@ let products=[],courses=[],allItems=[],editing=null,currentImages=[],currentFile
 function readLocalJson(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch(e){console.warn('Bad local storage:',key,e);return null}}
 let consultations=readLocalJson('wt_consults')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
 let settings=readLocalJson('wt_settings')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik-store2.hussainfiras23.workers.dev/api',adminKey:''};
-const api=()=>((document.querySelector('#apiBase')?.value||settings.apiBase||'https://warshatik.com/api').trim().replace(/\/$/,''));
+const ADMIN_API='https://warshatik-store2.hussainfiras23.workers.dev/api';
+const api=()=>ADMIN_API;
 const currentAdminKey=()=>String(document.querySelector('#adminKey')?.value||settings.adminKey||'').trim();
 function badge(s){return'badge '+(s||'normal')}function label(x){return x.statusText||STATUS_TEXT[x.status]||'عادي'}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 async function apiCall(path,opt={}){
   const headers={...(opt.headers||{})};if(opt.body&&!(opt.body instanceof FormData)&&!headers['content-type'])headers['content-type']='application/json';
   const key=currentAdminKey();if(key)headers['x-admin-key']=key;
-  const primary=api();
-  const fallback='https://warshatik-store2.hussainfiras23.workers.dev/api';
-  const bases=[primary,...(primary!==fallback?[fallback]:[])];
+  const primary=ADMIN_API;
+  const bases=[primary];
   let lastErr=null;
   for(const base of bases){
     const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
@@ -39,7 +39,21 @@ async function uploadAsset(file,kind){const key=currentAdminKey();if(!key)throw 
 async function deleteAsset(key){if(!key)return;await apiCall('/uploads?key='+encodeURIComponent(key),{method:'DELETE'})}
 async function loadCatalog(){try{const d=await apiCall('/catalog',{method:'GET'});products=d.products||[];courses=d.courses||[];allItems=d.items||[...products,...courses];render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}))}catch(e){console.error(e);toast('تعذر الاتصال بقاعدة البيانات - تحقق من رابط API')}}
 function rows(list){return list.map(x=>`<tr><td><strong>${x.title}</strong><br><small>${x.category}</small></td><td>${Number(x.price_iqd).toLocaleString()}</td><td>$${x.price_usd}</td><td><span class="${badge(x.status)}">${label(x)}</span></td><td><button class="mini" onclick="editItem('${x.type}','${x.id}')">تعديل</button> <button class="mini" onclick="delItem('${x.type}','${x.id}')">حذف</button></td></tr>`).join('')}
-function render(){const q=($('#search')?.value||'').toLowerCase();$('#productRows').innerHTML=rows(products.filter(x=>x.title.toLowerCase().includes(q)));$('#courseRows').innerHTML=rows(courses);$('#statProducts').textContent=products.length;$('#statCourses').textContent=courses.length;$('#statSold').textContent=[...products,...courses].filter(x=>x.status==='sold').length;$('#statActive').textContent=[...products,...courses].filter(x=>x.active).length;$('#recent').innerHTML=[...products,...courses].slice(0,5).map(x=>`<div class="recent"><strong>${x.title}</strong> — <span class="${badge(x.status)}">${label(x)}</span></div>`).join('')}
+function matchesAdminSearch(x,q){
+  if(!q)return true;
+  return [x.title,x.category,x.short,x.description,...(x.keywords||[])].filter(Boolean).join(' ').toLowerCase().includes(q);
+}
+function render(){
+  const qv=($('#search')?.value||'').trim().toLowerCase();
+  const pr=$('#productRows'),cr=$('#courseRows');
+  if(pr)pr.innerHTML=rows(products.filter(x=>matchesAdminSearch(x,qv)));
+  if(cr)cr.innerHTML=rows(courses.filter(x=>matchesAdminSearch(x,qv)));
+  if($('#statProducts'))$('#statProducts').textContent=products.length;
+  if($('#statCourses'))$('#statCourses').textContent=courses.length;
+  if($('#statSold'))$('#statSold').textContent=allItems.filter(x=>x.status==='sold').length;
+  if($('#statActive'))$('#statActive').textContent=allItems.filter(x=>x.active).length;
+  if($('#recent'))$('#recent').innerHTML=allItems.slice(0,5).map(x=>`<div class="recent"><strong>${x.title}</strong> — <span class="${badge(x.status)}">${label(x)}</span></div>`).join('');
+}
 function renderImages(){const wrap=$('#imageList');wrap.innerHTML=currentImages.map((img,i)=>`<div class="image-item" draggable="true" data-i="${i}"><img src="${img.url||''}" alt=""><small>${i===0?'★ الصورة الرئيسية':'اسحب للترتيب'}</small><button type="button" data-remove-image="${i}">حذف</button></div>`).join('');wrap.querySelectorAll('.image-item').forEach(el=>{el.addEventListener('dragstart',()=>{dragIndex=Number(el.dataset.i);el.classList.add('dragging')});el.addEventListener('dragend',()=>el.classList.remove('dragging'));el.addEventListener('dragover',e=>e.preventDefault());el.addEventListener('drop',e=>{e.preventDefault();const to=Number(el.dataset.i);if(dragIndex===null||dragIndex===to)return;const[m]=currentImages.splice(dragIndex,1);currentImages.splice(to,0,m);dragIndex=null;renderImages()})});wrap.querySelectorAll('[data-remove-image]').forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.removeImage),x=currentImages[i];if(!confirm('حذف هذه الصورة؟'))return;try{if(x?.key)await deleteAsset(x.key);currentImages.splice(i,1);renderImages();toast('تم حذف الصورة')}catch(e){alert(e.message)}})}
 function humanSize(n=0){if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
 function renderFiles(){const wrap=$('#fileList');wrap.innerHTML=currentFiles.map((f,i)=>`<div class="file-item"><div><strong>${f.name||'ملف'}</strong><small>${humanSize(f.size||0)}</small></div><button type="button" data-remove-file="${i}">حذف</button></div>`).join('');wrap.querySelectorAll('[data-remove-file]').forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.removeFile),x=currentFiles[i];if(!confirm('حذف هذا الملف؟'))return;try{if(x?.key)await deleteAsset(x.key);currentFiles.splice(i,1);renderFiles();toast('تم حذف الملف')}catch(e){alert(e.message)}})}
@@ -54,7 +68,7 @@ function syncSaleFields(){
 function refreshItemSectionOptions(selected){const sel=$('#itemSection');if(!sel)return;const secs=(window.wtStoreSections||[{id:'products',name:'المنتجات',type:'product'},{id:'courses',name:'الدورات',type:'course'}]).filter(s=>s.type!=='consultations');sel.innerHTML=secs.map(s=>`<option value="${s.type}">${s.name}</option>`).join('');if(selected&&[...sel.options].some(o=>o.value===selected))sel.value=selected}window.refreshItemSectionOptions=refreshItemSectionOptions;
 function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;refreshItemSectionOptions(item?.type||type);$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#keywords').value=(item?.keywords||[]).join(', ');$('#digitalOnly').checked=item?.digitalOnly??true;$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();syncSaleFields();updateNetPreview();$('#modal').classList.add('open')}
 function editItem(type,id){openEditor(type,allItems.find(x=>x.id===id)||[...products,...courses].find(x=>x.id===id))}
-async function delItem(type,id){if(!confirm('حذف؟'))return;try{await apiCall('/items/'+encodeURIComponent(id),{method:'DELETE'});await loadCatalog();toast('تم الحذف من المتجر')}catch(e){alert(e.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':e.message)}}
+async function delItem(type,id){if(!confirm('حذف؟'))return;try{await apiCall('/items/'+encodeURIComponent(id),{method:'DELETE'});allItems=allItems.filter(x=>x.id!==id);products=allItems.filter(x=>x.type==='product');courses=allItems.filter(x=>x.type==='course');render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}));toast('تم الحذف من المتجر')}catch(e){alert(e.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':e.message)}}
 function close(){ $('#modal').classList.remove('open') }
 function updateNetPreview(){
   const free=$('#status')?.value==='free';
@@ -154,8 +168,14 @@ $('#form').onsubmit=async e=>{
     youtube:$('#youtube').value,images:currentImages,files:currentFiles,active:$('#active').checked
   };
   try{
-    await apiCall('/items',{method:'POST',body:JSON.stringify(x)});
-    close();await loadCatalog();toast('تم حفظ التغيير في المتجر');
+    const d=await apiCall('/items',{method:'POST',body:JSON.stringify(x)});
+    const saved=d.item||x;
+    const i=allItems.findIndex(v=>v.id===saved.id);
+    if(i>=0)allItems[i]=saved;else allItems.push(saved);
+    products=allItems.filter(v=>v.type==='product');
+    courses=allItems.filter(v=>v.type==='course');
+    render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}));
+    close();toast('تم حفظ التغيير في المتجر');
   }catch(err){alert(err.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':err.message)}
 };
 
@@ -184,7 +204,7 @@ $('#storeName').value=settings.storeName;
 $('#telegram').value=settings.telegram;
 $('#whatsapp').value=settings.whatsapp;
 $('#currency').value=settings.currency;
-$('#apiBase').value=settings.apiBase;
+$('#apiBase').value=ADMIN_API;$('#apiBase').readOnly=true;settings.apiBase=ADMIN_API;
 $('#adminKey').value=settings.adminKey;
 $('#saveSettings').onclick=()=>{
   settings={
@@ -192,7 +212,7 @@ $('#saveSettings').onclick=()=>{
     telegram:$('#telegram').value,
     whatsapp:$('#whatsapp').value,
     currency:$('#currency').value,
-    apiBase:$('#apiBase').value.trim(),
+    apiBase:ADMIN_API,
     adminKey:$('#adminKey').value
   };
   localStorage.setItem('wt_settings',JSON.stringify(settings));
