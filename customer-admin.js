@@ -11,7 +11,7 @@ function renderCustomers(list){
     <td>${Number(c.purchases||0).toLocaleString('en-US')}</td>
     <td>${Number(c.total_iqd||0).toLocaleString('en-US')} د.ع</td>
     <td>$${Number(c.total_usd||0).toFixed(2)}</td>
-    <td>${c.last_purchase?new Date(c.last_purchase).toLocaleDateString('ar-IQ'):'—'}</td>
+    <td>${c.last_purchase?new Date(c.last_purchase).toLocaleDateString('en-GB'):'—'}</td>
   </tr>`).join('')||'<tr><td colspan="6">لا يوجد عملاء حتى الآن.</td></tr>';
   body.querySelectorAll('.customer-row').forEach(row=>row.onclick=()=>loadPurchases(decodeURIComponent(row.dataset.email)));
 }
@@ -42,7 +42,7 @@ async function loadPurchases(email){
     const first=(d.purchases||[])[0];if(first?.customer_name)q('#customerDetailName').textContent=first.customer_name;
     wrap.innerHTML=groups.map(o=>`<div class="purchase-group">
       <h4>طلب ${o.order_id}</h4>
-      <p class="hint">${o.paid_at?new Date(o.paid_at).toLocaleString('ar-IQ'):'—'} · الإجمالي ${money(o.total,o.currency)}</p>
+      <p class="hint">${o.paid_at?new Date(o.paid_at).toLocaleString('en-GB',{hour12:false}):'—'} · الإجمالي ${money(o.total,o.currency)}</p>
       ${o.items.map(x=>`<div class="purchase-line"><span>${x.title}</span><strong class="${Number(x.price||0)===0?'free-purchase':''}">${Number(x.price||0)===0?'مجاني':money(x.price,o.currency)}</strong></div>`).join('')}
     </div>`).join('')||'<p class="hint">لا توجد مشتريات مكتملة.</p>';
     panel.scrollIntoView({behavior:'smooth',block:'start'});
