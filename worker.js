@@ -105,7 +105,18 @@ async function sendPurchaseEmail(env,db,orderId,origin){
 export default{async fetch(req,env){
   const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
-  if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
+  if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/')){
+    const asset=await env.ASSETS.fetch(req);
+    const headers=new Headers(asset.headers);
+    const isHtml=(headers.get('content-type')||'').includes('text/html')||u.pathname==='/'||u.pathname.endsWith('.html');
+    if(isHtml){
+      headers.set('cache-control','no-store, no-cache, must-revalidate');
+      headers.set('pragma','no-cache');
+      headers.set('expires','0');
+      headers.set('x-warshatik-build','20261008r2');
+    }
+    return new Response(asset.body,{status:asset.status,statusText:asset.statusText,headers});
+  }
 
   if(u.pathname==='/api/recovery/verify'&&req.method==='POST'){
     try{return await fastRecoveryVerify(req,env,origin)}catch(e){await ensureInit(env.DB);return fastRecoveryVerify(req,env,origin)}
