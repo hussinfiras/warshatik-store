@@ -79,10 +79,8 @@ function setupWarshaLoader(){
   overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;
   document.body.appendChild(overlay);
   armWarshaTick(overlay);
-  const started=performance.now();
-  const minVisible=(matchMedia('(pointer:coarse)').matches||innerWidth<700)?2850:1800;
-  const hide=()=>{const wait=Math.max(0,minVisible-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),380)},wait)};
-  if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
+  const minVisible=(matchMedia('(pointer:coarse)').matches||innerWidth<700)?2100:1700;
+  setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),320)},minVisible);
 }
 window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);armWarshaTick(overlay);return overlay};
 window.hideWarshaLoader=()=>{const overlay=document.querySelector('.wt-brand-loader');if(overlay){overlay.classList.add('done');setTimeout(()=>overlay.remove(),380)}};
@@ -203,6 +201,7 @@ function setupHomeQuickCards(){
 }
 function setupAmbientElectronics(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(matchMedia('(pointer:coarse)').matches||innerWidth<700){document.documentElement.classList.add('fx-mobile');return;}
   const root=document.documentElement;
   if(matchMedia('(pointer:fine)').matches){
     let x=innerWidth/2,y=innerHeight/2,raf=0;
@@ -218,7 +217,7 @@ function setupAmbientElectronics(){
 }
 
 function setup(){applyWarshaLogo();setupWarshaLoader();setupHomeQuickCards();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
-function reveal(){const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.1});$$('.reveal:not(.visible)').forEach(x=>o.observe(x))}
+function reveal(){const els=$('.reveal:not(.visible)');if(!('IntersectionObserver' in window)){els.forEach(x=>x.classList.add('visible'));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.05});els.forEach(x=>o.observe(x))}window.reveal=reveal;
 function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.status==='sale'&&i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong class="${i.status==='sale'?'sale-current-price':''}">${i.status==='free'?'<span class="free-price"><b>مجاني</b></span>':money(i)}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
 async function renderListing(type,target,searchSelector){
   await window.catalogReady;await window.storefrontReady;
