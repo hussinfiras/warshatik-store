@@ -114,8 +114,8 @@ export default{async fetch(req,env){
   if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
 
   if(u.pathname==='/api/storefront'&&req.method==='GET'){
-    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/storefront-cache'),adminRequest=isAdmin(req,env);
-    if(cache&&!adminRequest){const hit=await cache.match(cacheKey);if(hit)return hit}
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/storefront-cache'),adminRequest=isAdmin(req,env),fresh=u.searchParams.get('fresh')==='1';
+    if(cache&&!adminRequest&&!fresh){const hit=await cache.match(cacheKey);if(hit)return hit}
     const s=await getSettings(env.DB);
     const response=json({
       home_title:s.home_title||'حوّل أفكارك الإلكترونية إلى مشاريع حقيقية.',
@@ -134,19 +134,19 @@ export default{async fetch(req,env){
         {id:'consultations',name:'الاستشارات',type:'consultations',visible:s.show_consultations!==false}
       ]
     },200,adminRequest?{'cache-control':'no-store'}:{'cache-control':'public, max-age=15, s-maxage=30'});
-    if(cache&&!adminRequest)await cache.put(cacheKey,response.clone());
+    if(cache&&!adminRequest&&!fresh)await cache.put(cacheKey,response.clone());
     return response;
   }
 
   if(u.pathname==='/api/catalog'&&req.method==='GET'){
-    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache'),adminRequest=isAdmin(req,env);
-    if(cache&&!adminRequest){
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache'),adminRequest=isAdmin(req,env),fresh=u.searchParams.get('fresh')==='1';
+    if(cache&&!adminRequest&&!fresh){
       const hit=await cache.match(cacheKey);
       if(hit)return hit;
     }
     const {results}=await env.DB.prepare('SELECT * FROM items ORDER BY sort_order,id').all();
     const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row),items:results.map(row)},200,adminRequest?{'cache-control':'no-store'}:{'cache-control':'public, max-age=15, s-maxage=30, stale-while-revalidate=60'});
-    if(cache&&!adminRequest)await cache.put(cacheKey,response.clone());
+    if(cache&&!adminRequest&&!fresh)await cache.put(cacheKey,response.clone());
     return response;
   }
 
