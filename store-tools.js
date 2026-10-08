@@ -91,9 +91,29 @@ async function saveStoreSettings(extra={}){
 async function loadStats(){
   try{
     const d=await bridge('stats');
-    setText('#statPaidOrders',d.paid_orders||0);setText('#statUnitsSold',d.units_sold||0);setText('#statCustomers',d.customers||0);setText('#statPendingOrders',d.pending_orders||0);
-    const ri=(d.revenue||[]).find(x=>x.currency==='IQD')?.total||0,ru=(d.revenue||[]).find(x=>x.currency==='USD')?.total||0;
-    setText('#statRevenueIQD',Number(ri).toLocaleString('en-US'));setText('#statRevenueUSD','
+    setText('#statPaidOrders',d.paid_orders||0);
+    setText('#statUnitsSold',d.units_sold||0);
+    setText('#statCustomers',d.customers||0);
+    setText('#statPendingOrders',d.pending_orders||0);
+    const ri=(d.revenue||[]).find(x=>x.currency==='IQD')?.total||0;
+    const ru=(d.revenue||[]).find(x=>x.currency==='USD')?.total||0;
+    setText('#statRevenueIQD',Number(ri).toLocaleString('en-US'));
+    setText('#statRevenueUSD','$'+Number(ru).toFixed(2));
+    window.adminSalesMap=Object.fromEntries((d.item_sales||[]).map(x=>[x.item_id,Number(x.sold||0)]));
+    window.render?.();
+    const top=q('#topProducts');
+    if(top)top.innerHTML=(d.top_products||[]).map(x=>'<div class="recent"><strong>'+x.title+'</strong><span>'+x.sold+' مبيعات</span></div>').join('')||'<p class="hint">لا توجد مبيعات في هذه الفترة بعد.</p>';
+    const label=q('#statsPeriodLabel');
+    if(label)label.textContent=d.reset_at&&d.reset_at!=='1970-01-01T00:00:00Z'?'الفترة الحالية بدأت: '+new Date(d.reset_at).toLocaleString('ar-IQ'):'الإحصائيات للفترة الكاملة.';
+  }catch(e){console.error(e)}
+}
+q('#resetStats')?.addEventListener('click',async()=>{
+  if(!confirm('بدء فترة إحصائية جديدة؟ إجمالي الإيرادات التاريخية لن يُحذف.'))return;
+  const btn=q('#resetStats');btn.disabled=true;
+  try{await bridge('reset-stats');await loadStats();toast('تم تصفير إحصائيات الفترة')}
+  catch(e){alert(e.message)}
+  finally{btn.disabled=false}
+});
 q('#saveStorefront')?.addEventListener('click',async()=>{
   const status=q('#storefrontStatus');
   const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
