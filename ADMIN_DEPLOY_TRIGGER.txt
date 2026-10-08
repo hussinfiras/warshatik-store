@@ -1,1 +1,1 @@
-Trigger admin deployment for consultation history, calendar picker, and ended status.
+Trigger admin deployment for section manager, keywords, and free flag.
