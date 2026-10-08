@@ -1,1 +1,1 @@
-Trigger deployment for reveal crash fix and restored homepage product/course sections.
+Trigger deployment for always-visible homepage category, product, and course cards.
