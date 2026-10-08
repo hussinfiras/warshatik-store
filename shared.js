@@ -43,45 +43,33 @@ function animatedWarshaMark(){
       <stop offset=".52" stop-color="#8055c2"/>
       <stop offset="1" stop-color="#9637da"/>
     </linearGradient>
-
     <mask id="wtLeftMask" maskUnits="userSpaceOnUse" x="260" y="250" width="330" height="480">
       <rect x="260" y="705" width="330" height="0" fill="white">
         <animate attributeName="y" from="705" to="430" dur="1.15s" begin="0.08s" fill="freeze"/>
         <animate attributeName="height" from="0" to="300" dur="1.15s" begin="0.08s" fill="freeze"/>
       </rect>
     </mask>
-
-    <mask id="wtTickMask" maskUnits="userSpaceOnUse" x="490" y="250" width="480" height="500">
-      <path d="M548 438 L635 658 L873 327"
-            fill="none"
-            stroke="white"
-            stroke-width="154"
-            stroke-linecap="square"
-            stroke-linejoin="miter"
-            pathLength="1"
-            stroke-dasharray="1"
-            stroke-dashoffset="1">
-        <animate attributeName="stroke-dashoffset" from="1" to="0" dur=".72s" begin="1.36s" fill="freeze"/>
+    <mask id="wtTickMaskA" maskUnits="userSpaceOnUse" x="490" y="360" width="210" height="370">
+      <path d="M548 438 L635 658" fill="none" stroke="white" stroke-width="150" stroke-linecap="butt" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1">
+        <animate attributeName="stroke-dashoffset" from="1" to="0" dur=".30s" begin="1.38s" fill="freeze"/>
       </path>
     </mask>
-
-    <clipPath id="wtLeftClip">
-      <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/>
-    </clipPath>
+    <mask id="wtTickMaskB" maskUnits="userSpaceOnUse" x="585" y="250" width="390" height="470">
+      <path d="M635 658 L873 327" fill="none" stroke="white" stroke-width="150" stroke-linecap="butt" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1">
+        <animate attributeName="stroke-dashoffset" from="1" to="0" dur=".46s" begin="1.67s" fill="freeze"/>
+      </path>
+    </mask>
   </defs>
-
   <path class="wt-left-ghost" d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"/>
-
-  <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z"
-        fill="url(#wtLoaderGrad)"
-        mask="url(#wtLeftMask)"/>
-
-  <path class="wt-tick-solid wt-tick-delayed"
-        d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z"
-        fill="url(#wtLoaderGrad)"
-        mask="url(#wtTickMask)"
-        style="opacity:0"/>
+  <path d="M297 464 388 705 422 705 532 560 485 465 450 514 427 464Z" fill="url(#wtLoaderGrad)" mask="url(#wtLeftMask)"/>
+  <path class="wt-tick-part wt-tick-a" d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtLoaderGrad)" mask="url(#wtTickMaskA)" style="opacity:0"/>
+  <path class="wt-tick-part wt-tick-b" d="M950 288 790 288 626 529 563 399 511 455 621 705 650 702Z" fill="url(#wtLoaderGrad)" mask="url(#wtTickMaskB)" style="opacity:0"/>
   </svg>`;
+}
+function armWarshaTick(overlay){
+  const a=overlay?.querySelector('.wt-tick-a'),b=overlay?.querySelector('.wt-tick-b');
+  if(a)setTimeout(()=>{a.style.opacity='1'},1370);
+  if(b)setTimeout(()=>{b.style.opacity='1'},1660);
 }
 function setupWarshaLoader(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
@@ -91,13 +79,12 @@ function setupWarshaLoader(){
   overlay.className='wt-brand-loader';
   overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;
   document.body.appendChild(overlay);
-  const tick=overlay.querySelector('.wt-tick-delayed');
-  if(tick)setTimeout(()=>{tick.style.opacity='1'},1340);
+  armWarshaTick(overlay);
   const started=performance.now();
   const hide=()=>{const wait=Math.max(0,2500-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)},wait)};
   if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
 }
-window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);const tick=overlay.querySelector('.wt-tick-delayed');if(tick)setTimeout(()=>{tick.style.opacity='1'},1340);return overlay};
+window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);armWarshaTick(overlay);return overlay};
 window.hideWarshaLoader=()=>{const overlay=document.querySelector('.wt-brand-loader');if(overlay){overlay.classList.add('done');setTimeout(()=>overlay.remove(),450)}};
 
 const currency=()=>localStorage.getItem('warsha-currency')||'IQD';
