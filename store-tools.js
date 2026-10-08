@@ -56,8 +56,12 @@ async function loadStoreSettings(){
     if(q('#c2usd'))q('#c2usd').value=cp.supervision?.usd??75;
     const ticketType=q('#ticketType');
     if(ticketType){
-      const ind=ticketType.querySelector('option[value="individual"]'),sup=ticketType.querySelector('option[value="supervision"]');
-      if(ind)ind.textContent='استشارة فردية — '+Number(cp.individual?.iqd??20000).toLocaleString('en-US')+' د.ع /     if(q('#defaultWarning'))q('#defaultWarning').value=s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.';
+      const ind=ticketType.querySelector('option[value="individual"]');
+      const sup=ticketType.querySelector('option[value="supervision"]');
+      if(ind)ind.textContent='استشارة فردية — '+Number(cp.individual?.iqd??20000).toLocaleString('en-US')+' د.ع / $'+Number(cp.individual?.usd??15);
+      if(sup)sup.textContent='إشراف شهري — '+Number(cp.supervision?.iqd??100000).toLocaleString('en-US')+' د.ع / $'+Number(cp.supervision?.usd??75);
+    }
+    if(q('#defaultWarning'))q('#defaultWarning').value=s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.';
     if(q('#showCourses'))q('#showCourses').checked=s.show_courses!==false;
     if(q('#showProducts'))q('#showProducts').checked=s.show_products!==false;
     if(q('#showConsultations'))q('#showConsultations').checked=s.show_consultations!==false;
