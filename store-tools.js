@@ -177,5 +177,17 @@ q('#toggleProducts')?.addEventListener('click',()=>toggleSection('#showProducts'
 q('#toggleCourses')?.addEventListener('click',()=>toggleSection('#showCourses','#toggleCourses'));
 q('#toggleConsultations')?.addEventListener('click',()=>toggleSection('#showConsultations','#toggleConsultations'));
 
-loadStoreSettings();loadStats();
+async function checkSystemHealth(){
+  const detail=q('#healthDetail');if(detail)detail.textContent='جاري الفحص...';
+  try{
+    const d=await bridge('health');
+    const set=(id,ok)=>{const el=q(id);if(el){el.textContent=ok?'يعمل ✓':'مشكلة ✕';el.className=ok?'health-ok':'health-bad'}};
+    set('#healthDb',!!d.db);set('#healthR2',!!d.r2);set('#healthEmail',!!d.email?.resend_key&&!!d.email?.from);set('#healthAdmin',!!d.admin_key);
+    if(detail)detail.textContent=(!d.email?.resend_key?'RESEND_API_KEY غير موجود في Worker. ':'')+(!d.email?.from?'EMAIL_FROM غير موجود في Worker. ':'')+(d.email?.from_value?'Sender: '+d.email.from_value:'');
+  }catch(e){if(detail)detail.textContent='❌ '+e.message}
+}
+q('#checkSystemHealth')?.addEventListener('click',checkSystemHealth);
+window.checkSystemHealth=checkSystemHealth;
+
+loadStoreSettings();loadStats();checkSystemHealth();
 })();
