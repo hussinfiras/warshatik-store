@@ -59,6 +59,25 @@ async function makeDownloadLinks(env,db,orderId,itemId,origin){
   for(const f of files){if(!f?.key)continue;const raw=randomToken(32),h=await hashText(raw),name=f.name||`${item.title}.zip`;await db.prepare('INSERT INTO download_tokens(token_hash,order_id,item_id,file_key,file_name,expires_at,created_at) VALUES(?,?,?,?,?,?,?)').bind(h,orderId,itemId,f.key,name,exp,now).run();out.push({name,url:`${origin}/api/download/${raw}`,expires_at:exp});}
   return out;
 }
+async function recoveryDownloadsFromFiles(env,db,orderId,itemId,title,filesValue,origin){
+  const files=safeParse(filesValue),now=Date.now(),exp=now+60*60*1000;
+  return Promise.all(files.filter(f=>f?.key).map(async f=>{
+    const raw=randomToken(32),h=await hashText(raw),name=f.name||`${title}.zip`;
+    await db.prepare('INSERT INTO download_tokens(token_hash,order_id,item_id,file_key,file_name,expires_at,created_at) VALUES(?,?,?,?,?,?,?)').bind(h,orderId,itemId,f.key,name,exp,now).run();
+    return {name,url:`${origin}/api/download/${raw}`,expires_at:exp};
+  }));
+}
+async function fastRecoveryVerify(req,env,origin){
+  const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);
+  const rec=await env.DB.prepare('SELECT id FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();
+  if(!rec)return json({error:'Invalid or expired code'},400);
+  const [_,rows]=await Promise.all([
+    env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id).run(),
+    env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all()
+  ]);
+  const items=await Promise.all((rows.results||[]).map(async it=>({order_id:it.order_id,item_id:it.item_id,title:it.title,downloads:await recoveryDownloadsFromFiles(env,env.DB,it.order_id,it.item_id,it.title,it.files,origin)})));
+  return json({ok:true,items});
+}
 async function sendPurchaseEmail(env,db,orderId,origin){
   const order=await db.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();if(!order||order.payment_status!=='paid')return {sent:false};
   const {results}=await db.prepare('SELECT * FROM order_items WHERE order_id=?').bind(orderId).all();let blocks='';
@@ -70,6 +89,10 @@ export default{async fetch(req,env){
   const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/'))return env.ASSETS.fetch(req);
+
+  if(u.pathname==='/api/recovery/verify'&&req.method==='POST'){
+    try{return await fastRecoveryVerify(req,env,origin)}catch(e){await ensureInit(env.DB);return fastRecoveryVerify(req,env,origin)}
+  }
 
   if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
     const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
@@ -175,11 +198,6 @@ export default{async fetch(req,env){
     const paid=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE email=? AND payment_status='paid'").bind(email).first();
     if(Number(paid?.c||0)>0){const code=String(Math.floor(100000+Math.random()*900000)),h=await hashText(code),now=Date.now();await env.DB.prepare('DELETE FROM recovery_codes WHERE email=?').bind(email).run();await env.DB.prepare('INSERT INTO recovery_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,h,now+15*60*1000,now).run();await sendEmail(env,email,'رمز استرجاع مشتريات ورشة تك',`<div dir="rtl"><h2>رمز استرجاع مشترياتك</h2><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>الرمز صالح لمدة 15 دقيقة.</p></div>`);}
     return json({ok:true,message:'إذا كان البريد مرتبطاً بمشتريات مدفوعة، أرسلنا رمز تحقق.'});
-  }
-
-  if(u.pathname==='/api/recovery/verify'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);const rec=await env.DB.prepare('SELECT * FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();if(!rec)return json({error:'Invalid or expired code'},400);await env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id).run();
-    const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();const items=[];for(const it of results){items.push({order_id:it.order_id,item_id:it.item_id,title:it.title,downloads:await makeDownloadLinks(env,env.DB,it.order_id,it.item_id,origin)});}return json({ok:true,items});
   }
 
   if(u.pathname.startsWith('/api/download/')&&req.method==='GET'){
