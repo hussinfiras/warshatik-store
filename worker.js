@@ -49,9 +49,24 @@ async function hashText(v){const b=await crypto.subtle.digest('SHA-256',new Text
 async function sendEmail(env,to,subject,html){
   if(!env.RESEND_API_KEY)return {sent:false,reason:'RESEND_API_KEY missing in Cloudflare Worker'};
   if(!env.EMAIL_FROM)return {sent:false,reason:'EMAIL_FROM missing in Cloudflare Worker'};
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html})});
-  if(!r.ok){let detail='';try{const x=await r.json();detail=x.message||x.name||''}catch{}return {sent:false,reason:`Email HTTP ${r.status}${detail?': '+detail:''}`};}
-  return {sent:true};
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),8000);
+  try{
+    const r=await fetch('https://api.resend.com/emails',{
+      method:'POST',
+      headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},
+      body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html}),
+      signal:controller.signal
+    });
+    if(!r.ok){
+      let detail='';try{const x=await r.json();detail=x.message||x.name||''}catch{}
+      return {sent:false,reason:`Email HTTP ${r.status}${detail?': '+detail:''}`};
+    }
+    let id='';try{const x=await r.json();id=x.id||''}catch{}
+    return {sent:true,id};
+  }catch(e){
+    return {sent:false,reason:e?.name==='AbortError'?'Email provider timeout':'Email network error: '+(e?.message||'unknown error')};
+  }finally{clearTimeout(timer)}
 }
 async function makeDownloadLinks(env,db,orderId,itemId,origin){
   const item=await db.prepare('SELECT files,title FROM items WHERE id=?').bind(itemId).first();if(!item)return[];
@@ -194,9 +209,15 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({ok:true});
+    const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({ok:false,error:'Invalid email'},400);
     const paid=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE email=? AND payment_status='paid'").bind(email).first();
-    if(Number(paid?.c||0)>0){const code=String(Math.floor(100000+Math.random()*900000)),h=await hashText(code),now=Date.now();await env.DB.prepare('DELETE FROM recovery_codes WHERE email=?').bind(email).run();await env.DB.prepare('INSERT INTO recovery_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,h,now+15*60*1000,now).run();await sendEmail(env,email,'رمز استرجاع مشتريات ورشة تك',`<div dir="rtl"><h2>رمز استرجاع مشترياتك</h2><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>الرمز صالح لمدة 15 دقيقة.</p></div>`);}
+    if(Number(paid?.c||0)>0){
+      const code=String(Math.floor(100000+Math.random()*900000)),h=await hashText(code),now=Date.now();
+      await env.DB.prepare('DELETE FROM recovery_codes WHERE email=?').bind(email).run();
+      await env.DB.prepare('INSERT INTO recovery_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,h,now+15*60*1000,now).run();
+      const mail=await sendEmail(env,email,'رمز استرجاع مشتريات ورشة تك',`<div dir="rtl"><h2>رمز استرجاع مشترياتك</h2><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>الرمز صالح لمدة 15 دقيقة.</p></div>`);
+      if(!mail.sent)return json({ok:false,error:'Email delivery failed',reason:mail.reason||'Unknown email error'},503);
+    }
     return json({ok:true,message:'إذا كان البريد مرتبطاً بمشتريات مدفوعة، أرسلنا رمز تحقق.'});
   }
 
