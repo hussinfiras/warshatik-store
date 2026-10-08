@@ -189,7 +189,7 @@ function renderHomeQuickCards(settings){
     }
     const title=names[key]||'القسم';
     const image=String(images[key]||'').trim();
-    card.classList.add('quick-card-v2');
+    card.classList.add('quick-card-v2','visible');card.classList.remove('reveal');
     card.innerHTML=(image?'<img class="quick-bg-image-v2" src="'+image.replace(/"/g,'&quot;')+'" alt="">':'<div class="quick-pattern-v2 quick-pattern-v2-'+key+'"></div>')+
       '<div class="quick-title-v2">'+title+'</div>';
   });
@@ -210,9 +210,8 @@ function renderHomeCatalogSections(){
   const courses=(W?.courses||[]).filter(x=>x.active&&isItemSectionVisible(x)).slice(0,3);
   if(productSection)productSection.hidden=window.storeVisibility.show_products===false||!products.length;
   if(courseSection)courseSection.hidden=window.storeVisibility.show_courses===false||!courses.length;
-  productGrid.innerHTML=products.map(card).join('');
-  courseGrid.innerHTML=courses.map(card).join('');
-  reveal();
+  productGrid.innerHTML=products.map(x=>card(x).replace('product-card reveal','product-card visible')).join('');
+  courseGrid.innerHTML=courses.map(x=>card(x).replace('product-card reveal','product-card visible')).join('');
 }
 function setupHomeCatalogSections(){
   if(document.body?.dataset?.page!=='home')return;
