@@ -152,15 +152,23 @@ function recommendItems(baseItems,limit=4){
   const all=allCatalogItems().filter(x=>isItemSectionVisible(x)&&x.active&&!['sold','coming'].includes(x.status));
   const baseIds=new Set((baseItems||[]).map(x=>x.id)),baseWords=new Set();
   (baseItems||[]).forEach(x=>itemWords(x).forEach(w=>baseWords.add(w)));
-  return all.filter(x=>!baseIds.has(x.id)).map(x=>{
+  const baseKeywords=new Set((baseItems||[]).flatMap(b=>(b.keywords||[]).map(k=>String(k).trim().toLowerCase())).filter(Boolean));
+  const ranked=all.filter(x=>!baseIds.has(x.id)).map(x=>{
     let score=0;
     if((baseItems||[]).some(b=>b.category&&x.category&&b.category.toLowerCase()===x.category.toLowerCase()))score+=6;
     itemWords(x).forEach(w=>{if(baseWords.has(w))score+=1});
-    const baseKeywords=new Set((baseItems||[]).flatMap(b=>(b.keywords||[]).map(k=>String(k).trim().toLowerCase())).filter(Boolean));
     (x.keywords||[]).forEach(k=>{if(baseKeywords.has(String(k).trim().toLowerCase()))score+=8});
     if(x.status==='featured')score+=2;if(x.status==='new')score+=1;
     return {x,score};
-  }).filter(v=>v.score>0).sort((a,b)=>b.score-a.score).slice(0,limit).map(v=>v.x);
+  }).sort((a,b)=>b.score-a.score);
+  const matched=ranked.filter(v=>v.score>0).slice(0,limit).map(v=>v.x);
+  if(matched.length>=limit)return matched;
+  const used=new Set(matched.map(x=>x.id));
+  const fallback=ranked.filter(v=>!used.has(v.x.id)).sort((a,b)=>{
+    const rank=s=>s==='featured'?3:s==='new'?2:s==='sale'?1:0;
+    return rank(b.x.status)-rank(a.x.status);
+  }).slice(0,limit-matched.length).map(v=>v.x);
+  return [...matched,...fallback];
 }
 function recommendationCards(items){
   return items.map(i=>card(i)).join('');
