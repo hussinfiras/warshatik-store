@@ -239,7 +239,11 @@ q('#homeImageInput')?.addEventListener('change',async e=>{
         consultations:q('#quickConsultationsImage')?.value.trim()||''
       };
       const saved=await bridge('save-settings',{home_card_images:images});
-      window.wtStoreSettings={...(window.wtStoreSettings||{}),home_card_images:saved.settings?.home_card_images||images};
+      const confirmed=saved.settings?.home_card_images||images;
+      window.wtStoreSettings={...(window.wtStoreSettings||{}),home_card_images:confirmed};
+      const expected=images[itemId==='home-card-products'?'products':itemId==='home-card-courses'?'courses':'consultations'];
+      const actual=confirmed[itemId==='home-card-products'?'products':itemId==='home-card-courses'?'courses':'consultations']||'';
+      if(expected&&actual!==expected)throw new Error('تم رفع الصورة لكن لم يتم حفظ رابطها في الإعدادات.');
       toast('تم رفع وحفظ خلفية القسم');
     }catch(err){alert(err.message)}
   });
