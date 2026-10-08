@@ -93,10 +93,112 @@ async function loadStats(){
     const d=await bridge('stats');
     setText('#statPaidOrders',d.paid_orders||0);setText('#statUnitsSold',d.units_sold||0);setText('#statCustomers',d.customers||0);setText('#statPendingOrders',d.pending_orders||0);
     const ri=(d.revenue||[]).find(x=>x.currency==='IQD')?.total||0,ru=(d.revenue||[]).find(x=>x.currency==='USD')?.total||0;
-    setText('#statRevenueIQD',Number(ri).toLocaleString('en-US'));setText('#statRevenueUSD','$'+Number(ru).toFixed(2));
-    const top=q('#topProducts');if(top)top.innerHTML=(d.top_products||[]).map(x=>'<div class="recent"><strong>'+x.title+'</strong><span>'+x.sold+' مبيعات</span></div>').join('')||'<p class="hint">لا توجد مبيعات مدفوعة بعد.</p>';
+    setText('#statRevenueIQD',Number(ri).toLocaleString('en-US'));setText('#statRevenueUSD','
+q('#saveStorefront')?.addEventListener('click',async()=>{
+  const status=q('#storefrontStatus');
+  const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
+  if(!key){if(status)status.textContent='❌ أدخل Admin API Key في الإعدادات أولاً.';return}
+  settings.adminKey=key;
+  if(!settings.apiBase)settings.apiBase='https://warshatik-store2.hussainfiras23.workers.dev/api';
+  localStorage.setItem('wt_settings',JSON.stringify(settings));
+  if(q('#apiBase'))q('#apiBase').value=settings.apiBase;
+  if(status)status.textContent='جاري الحفظ...';
+  const btn=q('#saveStorefront');if(btn)btn.disabled=true;
+  try{
+    await saveStoreSettings();
+    if(status)status.textContent='✅ تم الحفظ بنجاح. حدّث المتجر خلال ثوانٍ لرؤية التغييرات.';
+    toast('تم حفظ واجهة المتجر');
+  }catch(e){
+    const msg=e.message==='Unauthorized'?'Admin API Key غير صحيح أو لا يطابق Cloudflare.':(e.message||'فشل الاتصال بالخادم');
+    if(status)status.textContent='❌ '+msg;
+    toast('فشل الحفظ');
+  }finally{if(btn)btn.disabled=false}
+});
+q('#clearHomeImage')?.addEventListener('click',()=>{if(q('#homeImage'))q('#homeImage').value=''});
+q('#homeImageInput')?.addEventListener('change',async e=>{
+  const file=e.target.files?.[0];e.target.value='';if(!file)return;
+  if(file.size>10*1024*1024){alert('الصورة أكبر من 10MB');return}
+  try{
+    const headers={'content-type':file.type||'application/octet-stream','x-admin-key':(q('#adminKey')?.value||settings.adminKey||'').trim(),'x-file-name':encodeURIComponent(file.name),'x-file-kind':'image','x-item-id':'home'};
+    const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    q('#homeImage').value=d.url||'';toast('تم رفع صورة الواجهة');
+  }catch(err){alert(err.message)}
+});
+q('#saveSettings')?.addEventListener('click',async()=>{try{await saveStoreSettings();toast('تم حفظ إعدادات الرسوم')}catch(e){console.error(e)}});
+['#waylFeePercent','#waylFixedIQD','#waylFixedUSD'].forEach(id=>q(id)?.addEventListener('input',()=>{window.wtStoreSettings={...(window.wtStoreSettings||{}),wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0)};if(window.updateNetPreview)window.updateNetPreview()}));
+
+async function uploadBannerImage(file,index){
+  if(!file)return;
+  if(file.size>10*1024*1024){alert('الصورة أكبر من 10MB');return}
+  try{
+    const headers={'content-type':file.type||'application/octet-stream','x-admin-key':settings.adminKey,'x-file-name':encodeURIComponent(file.name),'x-file-kind':'image','x-item-id':'home-banner-'+index};
+    const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    const input=q('#banner'+index+'Image');if(input)input.value=d.url||'';
+    toast('تم رفع صورة البنر');
+  }catch(err){alert(err.message)}
+}
+[1,2,3].forEach(i=>q('#banner'+i+'Upload')?.addEventListener('change',async e=>{
+  const file=e.target.files?.[0];e.target.value='';await uploadBannerImage(file,i);
+}));
+
+function updateVisibilityButtons(){
+  const map=[
+    ['#toggleProducts','#showProducts','المنتجات'],
+    ['#toggleCourses','#showCourses','الدورات'],
+    ['#toggleConsultations','#showConsultations','الاستشارات']
+  ];
+  map.forEach(([btnSel,checkSel])=>{
+    const btn=q(btnSel),check=q(checkSel);if(!btn||!check)return;
+    const visible=check.checked;
+    btn.textContent=visible?'إخفاء القسم':'إظهار القسم';
+    btn.classList.toggle('is-hidden',!visible);
+    btn.title=visible?'سيتم إخفاء القسم وكل محتواه من المتجر':'سيتم إظهار القسم من جديد';
+  });
+}
+async function toggleSection(checkSelector,buttonSelector){
+  const check=q(checkSelector),btn=q(buttonSelector);if(!check||!btn)return;
+  const previous=check.checked;
+  check.checked=!previous;updateVisibilityButtons();
+  btn.disabled=true;
+  try{
+    await saveStoreSettings();
+    toast(check.checked?'تم إظهار القسم':'تم إخفاء القسم');
+  }catch(e){
+    check.checked=previous;updateVisibilityButtons();
+    alert(e.message==='Unauthorized'?'Admin API Key غير صحيح أو لا يطابق Cloudflare.':e.message);
+  }finally{btn.disabled=false}
+}
+q('#toggleProducts')?.addEventListener('click',()=>toggleSection('#showProducts','#toggleProducts'));
+q('#toggleCourses')?.addEventListener('click',()=>toggleSection('#showCourses','#toggleCourses'));
+q('#toggleConsultations')?.addEventListener('click',()=>toggleSection('#showConsultations','#toggleConsultations'));
+
+async function checkSystemHealth(){
+  const detail=q('#healthDetail');if(detail)detail.textContent='جاري الفحص...';
+  try{
+    const d=await bridge('health');
+    const set=(id,ok)=>{const el=q(id);if(el){el.textContent=ok?'يعمل ✓':'مشكلة ✕';el.className=ok?'health-ok':'health-bad'}};
+    set('#healthDb',!!d.db);set('#healthR2',!!d.r2);set('#healthEmail',!!d.email?.resend_key&&!!d.email?.from);set('#healthAdmin',!!d.admin_key);
+    if(detail)detail.textContent=(!d.email?.resend_key?'RESEND_API_KEY غير موجود في Worker. ':'')+(!d.email?.from?'EMAIL_FROM غير موجود في Worker. ':'')+(d.email?.from_value?'Sender: '+d.email.from_value:'');
+  }catch(e){if(detail)detail.textContent='❌ '+e.message}
+}
+q('#checkSystemHealth')?.addEventListener('click',checkSystemHealth);
+window.checkSystemHealth=checkSystemHealth;
+
+loadStoreSettings();loadStats();checkSystemHealth();
+})();+Number(ru).toFixed(2));
+    window.adminSalesMap=Object.fromEntries((d.item_sales||[]).map(x=>[x.item_id,Number(x.sold||0)]));
+    window.render?.();
+    const top=q('#topProducts');if(top)top.innerHTML=(d.top_products||[]).map(x=>'<div class="recent"><strong>'+x.title+'</strong><span>'+x.sold+' مبيعات</span></div>').join('')||'<p class="hint">لا توجد مبيعات في هذه الفترة بعد.</p>';
+    const label=q('#statsPeriodLabel');if(label)label.textContent=d.reset_at&&d.reset_at!=='1970-01-01T00:00:00Z'?'الفترة الحالية بدأت: '+new Date(d.reset_at).toLocaleString('ar-IQ'):'الإحصائيات للفترة الكاملة.';
   }catch(e){console.error(e)}
 }
+q('#resetStats')?.addEventListener('click',async()=>{
+  if(!confirm('بدء فترة إحصائية جديدة؟ إجمالي الإيرادات التاريخية لن يُحذف.'))return;
+  const btn=q('#resetStats');btn.disabled=true;
+  try{await bridge('reset-stats');await loadStats();toast('تم تصفير إحصائيات الفترة')}catch(e){alert(e.message)}finally{btn.disabled=false}
+});
 q('#saveStorefront')?.addEventListener('click',async()=>{
   const status=q('#storefrontStatus');
   const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
