@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       const fresh=await window.catalogRefresh;
       if(fresh)data=window.WARSHA_DATA=fresh;
     }
-    const region=window.regionReady?await window.regionReady:{country:'XX',is_iraq:false};
+    const region={country:'XX',is_iraq:true};
     const type=params.get('type')||'product';
     const all=window.allCatalogItems?window.allCatalogItems():[...(data.products||[]),...(data.courses||[]),...(data.items||[])];
     const item=all.find(x=>x.id===id);
@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
       root.innerHTML='<div class="empty-card"><h1>المنتج غير موجود</h1><p>قد يكون الرابط قديماً أو تم إخفاء المنتج.</p><a class="btn btn-primary" href="products.html">الرجوع للمنتجات</a></div>';
       return;
     }
-    if((item.type==='product'&&storefront.show_products===false)||(item.type==='course'&&storefront.show_courses===false)||!window.isItemSectionVisible?.(item)){
+    const sectionVisible=typeof window.isItemSectionVisible==='function'?window.isItemSectionVisible(item):true;
+    if((item.type==='product'&&storefront.show_products===false)||(item.type==='course'&&storefront.show_courses===false)||!sectionVisible){
       location.replace('index.html');return;
     }
 
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const statusClassLocal=s=>'flag flag-'+(s||'normal');
 
     document.title=item.title+' | ورشة تك';
-    const blockedByRegion=!!item.iraqOnly&&!region.is_iraq;
+    let blockedByRegion=false;
     const disabled=['sold','coming'].includes(item.status)||blockedByRegion;
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
@@ -76,6 +77,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
       btn.textContent='تمت الإضافة ✓';
     };
 
+    if(item.iraqOnly&&window.regionReady){
+      window.regionReady.then(r=>{
+        if(r&&!r.is_iraq){
+          const b=document.getElementById('addCartBtn');
+          if(b){b.disabled=true;b.style.opacity='.45';b.style.cursor='not-allowed';b.textContent='متاح داخل العراق فقط'}
+        }
+      }).catch(()=>{});
+    }
     if(window.recommendItems&&window.recommendationCards){
       const recs=window.recommendItems([item],3);
       if(recs.length){
