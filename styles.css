@@ -42,3 +42,9 @@
 .dashboard-head{margin-bottom:4px}.dashboard-head h2{margin:0}.danger-soft{border-color:#f1c6ca;color:#a52d39;background:#fff5f6}.lifetime-card{border-color:#d9caec;background:#fbf8ff}
 #customerSearch{width:100%;margin-top:14px}.customer-row{cursor:pointer}.customer-row:hover{background:#faf7fd}
 .customer-detail{margin-top:16px}.purchase-group{border:1px solid #e8e2ee;border-radius:14px;padding:14px;margin-top:10px;background:#fbf9fd}.purchase-group h4{margin:0 0 7px}.purchase-line{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #eee}.purchase-line:first-of-type{border-top:0}.free-purchase{color:#168052;font-weight:800}
+
+.home-card-editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.home-card-editor{border:1px solid #e5ddec;background:#fbf9fd;border-radius:14px;padding:14px;display:grid;gap:9px}
+.home-card-editor h3{margin:0}
+#ticketDate{direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
+@media(max-width:850px){.home-card-editor-grid{grid-template-columns:1fr}}
