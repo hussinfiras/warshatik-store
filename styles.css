@@ -33,3 +33,8 @@
 .section-items{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;padding-top:5px}
 .section-item-edit{border:1px solid #e2d5ef;background:#fff;color:#6f42a7;border-radius:10px;padding:6px 9px;font:700 11px Cairo,sans-serif;cursor:pointer}
 .section-item-edit:hover{background:#f4edfb}
+
+.system-health{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.system-health>div{border:1px solid #ece5f2;border-radius:12px;padding:10px;background:#fbf9fd;display:flex;justify-content:space-between;gap:8px}
+.health-ok{color:#147a4d}.health-bad{color:#b42334}
+@media(max-width:650px){.system-health{grid-template-columns:1fr}}
