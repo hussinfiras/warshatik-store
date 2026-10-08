@@ -401,3 +401,21 @@ body[data-page="home"] .quick-card{
 
 /* Mobile Safari: keep logo tick pieces fully hidden until their own draw stage */
 .wt-tick-part{opacity:0}
+
+/* Keep product cards aligned regardless of title/description length */
+.cards-grid{align-items:stretch}
+.product-card{display:flex;flex-direction:column;height:100%}
+.product-media{flex:0 0 auto}
+.product-body{display:flex;flex-direction:column;flex:1;min-height:0}
+.product-body h3{min-height:2.8em;display:flex;align-items:flex-start}
+.product-body>p{min-height:3.7em;margin-bottom:0}
+.price-row{margin-top:auto;padding-top:18px;min-height:62px;align-items:flex-end}
+.price-row>div{display:flex;align-items:flex-end;min-height:34px}
+.free-price{min-height:34px;align-items:center}
+@media(max-width:600px){
+  .product-body h3{min-height:auto}
+  .product-body>p{min-height:auto}
+  .price-row{min-height:54px}
+}
+/* Single gated tick prevents partial Tik fragments before the draw begins */
+.wt-tick-group{opacity:0}
