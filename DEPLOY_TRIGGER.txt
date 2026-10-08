@@ -1,1 +1,1 @@
-Force store redeploy for non-cached homepage category card build 20261008r2.
+Force deploy: run Worker before static assets to eliminate stale homepage HTML.
