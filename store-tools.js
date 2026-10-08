@@ -45,6 +45,15 @@ async function loadStoreSettings(){
       if(q('#banner'+i+'Link'))q('#banner'+i+'Link').value=b.link||'';
       if(q('#banner'+i+'Button'))q('#banner'+i+'Button').value=b.button||'';
     }
+    const cardImages=s.home_card_images||{};
+    if(q('#quickProductsImage'))q('#quickProductsImage').value=cardImages.products||'';
+    if(q('#quickCoursesImage'))q('#quickCoursesImage').value=cardImages.courses||'';
+    if(q('#quickConsultationsImage'))q('#quickConsultationsImage').value=cardImages.consultations||'';
+    const cp=s.consultation_prices||{individual:{iqd:20000,usd:15},supervision:{iqd:100000,usd:75}};
+    if(q('#c1price'))q('#c1price').value=cp.individual?.iqd??20000;
+    if(q('#c1usd'))q('#c1usd').value=cp.individual?.usd??15;
+    if(q('#c2price'))q('#c2price').value=cp.supervision?.iqd??100000;
+    if(q('#c2usd'))q('#c2usd').value=cp.supervision?.usd??75;
     if(q('#defaultWarning'))q('#defaultWarning').value=s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.';
     if(q('#showCourses'))q('#showCourses').checked=s.show_courses!==false;
     if(q('#showProducts'))q('#showProducts').checked=s.show_products!==false;
@@ -57,6 +66,9 @@ async function loadStoreSettings(){
     window.refreshItemSectionOptions?.();
     window.dispatchEvent(new CustomEvent('warsha:sections-loaded',{detail:window.wtStoreSections}));
     updateVisibilityButtons();
+    if(q('#waylFeePercent'))q('#waylFeePercent').value=s.wayl_fee_percent??'';
+    if(q('#waylFixedIQD'))q('#waylFixedIQD').value=s.wayl_fixed_iqd??'';
+    if(q('#waylFixedUSD'))q('#waylFixedUSD').value=s.wayl_fixed_usd??'';
     window.updateNetPreview?.();
   }catch(e){
     console.error(e);
@@ -82,6 +94,18 @@ async function saveStoreSettings(extra={}){
     show_products:q('#showProducts')?.checked??true,
     show_consultations:q('#showConsultations')?.checked??true,
     sections:window.wtStoreSections||undefined,
+    home_card_images:{
+      products:q('#quickProductsImage')?.value.trim()||'',
+      courses:q('#quickCoursesImage')?.value.trim()||'',
+      consultations:q('#quickConsultationsImage')?.value.trim()||''
+    },
+    consultation_prices:{
+      individual:{iqd:Number(q('#c1price')?.value||20000),usd:Number(q('#c1usd')?.value||15)},
+      supervision:{iqd:Number(q('#c2price')?.value||100000),usd:Number(q('#c2usd')?.value||75)}
+    },
+    wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),
+    wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),
+    wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0),
     ...extra
   };
   const d=await bridge('save-settings',payload);
@@ -107,7 +131,7 @@ async function loadStats(){
     const top=q('#topProducts');
     if(top)top.innerHTML=(d.top_products||[]).map(x=>'<div class="recent"><strong>'+x.title+'</strong><span>'+x.sold+' مبيعات</span></div>').join('')||'<p class="hint">لا توجد مبيعات في هذه الفترة بعد.</p>';
     const label=q('#statsPeriodLabel');
-    if(label)label.textContent=d.reset_at&&d.reset_at!=='1970-01-01T00:00:00Z'?'الفترة الحالية بدأت: '+new Date(d.reset_at).toLocaleString('ar-IQ'):'الإحصائيات للفترة الكاملة.';
+    if(label)label.textContent=d.reset_at&&d.reset_at!=='1970-01-01T00:00:00Z'?'الفترة الحالية بدأت: '+new Date(d.reset_at).toLocaleString('en-GB',{hour12:false}):'الإحصائيات للفترة الكاملة.';
   }catch(e){console.error(e)}
 }
 window.loadStats=loadStats;
@@ -148,6 +172,20 @@ q('#homeImageInput')?.addEventListener('change',async e=>{
   const file=e.target.files?.[0];e.target.value='';if(!file)return;
   try{const d=await uploadImage(file,'home-banner-'+i);q('#banner'+i+'Image').value=d.url||'';toast('تم رفع صورة البنر')}catch(err){alert(err.message)}
 }));
+
+
+[['quickProductsUpload','quickProductsImage','home-card-products'],['quickCoursesUpload','quickCoursesImage','home-card-courses'],['quickConsultationsUpload','quickConsultationsImage','home-card-consultations']].forEach(([uploadId,inputId,itemId])=>{
+  q('#'+uploadId)?.addEventListener('change',async e=>{
+    const file=e.target.files?.[0];e.target.value='';if(!file)return;
+    try{const d=await uploadImage(file,itemId);q('#'+inputId).value=d.url||'';toast('تم رفع صورة خلفية القسم')}catch(err){alert(err.message)}
+  });
+});
+document.querySelectorAll('[data-clear-card]').forEach(btn=>btn.addEventListener('click',()=>{
+  const map={products:'#quickProductsImage',courses:'#quickCoursesImage',consultations:'#quickConsultationsImage'};
+  const el=q(map[btn.dataset.clearCard]);if(el)el.value='';
+}));
+q('#saveC1')?.addEventListener('click',async()=>{try{await saveStoreSettings();toast('تم حفظ أسعار الاستشارة الفردية')}catch(e){alert(e.message)}});
+q('#saveC2')?.addEventListener('click',async()=>{try{await saveStoreSettings();toast('تم حفظ أسعار باقة الإشراف')}catch(e){alert(e.message)}});
 
 function updateVisibilityButtons(){
   [['#toggleProducts','#showProducts'],['#toggleCourses','#showCourses'],['#toggleConsultations','#showConsultations']].forEach(([b,c])=>{
