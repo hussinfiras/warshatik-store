@@ -439,3 +439,29 @@ body[data-page="home"] .quick-card{
 }
 .price-row strong{line-height:1.15}
 .free-price{min-height:34px}
+
+/* Homepage category cards: lightweight patterns, no extra network requests unless custom image is chosen */
+.quick-card{position:relative;overflow:hidden;min-height:190px;padding:0;background:#fff}
+.quick-copy{position:relative;z-index:2;padding:28px;min-height:190px;display:flex;flex-direction:column;justify-content:flex-end;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.94) 72%)}
+.quick-copy h3{margin:0 0 7px}.quick-copy p{margin:0 0 12px}.quick-pattern{position:absolute;inset:0;opacity:.72;background-position:center;background-size:cover}
+.quick-pattern-product{background:
+ radial-gradient(circle at 18% 28%,rgba(128,85,194,.14) 0 3px,transparent 4px),
+ linear-gradient(90deg,transparent 48%,rgba(128,85,194,.12) 49% 51%,transparent 52%),
+ linear-gradient(0deg,transparent 48%,rgba(128,85,194,.09) 49% 51%,transparent 52%);
+ background-size:54px 54px,92px 92px,92px 92px}
+.quick-pattern-course{background:
+ repeating-linear-gradient(0deg,transparent 0 25px,rgba(128,85,194,.08) 26px 27px),
+ repeating-linear-gradient(90deg,transparent 0 44px,rgba(128,85,194,.07) 45px 46px),
+ radial-gradient(circle at 78% 24%,rgba(128,85,194,.14) 0 18px,transparent 19px)}
+.quick-pattern-consult{background:
+ radial-gradient(circle at 22% 32%,rgba(128,85,194,.12) 0 18px,transparent 19px),
+ radial-gradient(circle at 70% 42%,rgba(128,85,194,.09) 0 28px,transparent 29px),
+ linear-gradient(135deg,transparent 46%,rgba(128,85,194,.08) 47% 53%,transparent 54%)}
+.quick-card.has-custom-bg .quick-pattern{background-image:var(--quick-bg);background-size:cover;background-position:center;opacity:1}
+.quick-card.has-custom-bg .quick-copy{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.95) 76%)}
+/* Sale emphasis */
+.sale-current-price{font-size:23px!important;color:#8055c2}
+.detail-price-sale strong{font-size:clamp(31px,4vw,42px);color:#8055c2}
+.detail-price-sale .old-price{font-size:14px;margin-bottom:5px}
+/* Recommendation cards rendered dynamically should be visible immediately */
+#cartRecommendGrid .product-card{opacity:1!important;transform:none}
