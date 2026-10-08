@@ -1,1 +1,1 @@
-Trigger admin deployment for section manager, keywords, and free flag.
+Trigger admin deployment after control panel review and diagnostics improvements.
