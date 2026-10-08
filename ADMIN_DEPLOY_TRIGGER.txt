@@ -1,1 +1,1 @@
-Trigger admin deployment after control panel review and diagnostics improvements.
+Trigger admin deployment for customer database, sales counts, and resettable statistics.
