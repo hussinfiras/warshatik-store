@@ -1,1 +1,1 @@
-Trigger deployment for product detail loading and simplified free label.
+Trigger deployment for email timeout handling and recovery/checkout delivery diagnostics.
