@@ -181,11 +181,20 @@ q('#saveStorefront')?.addEventListener('click',async()=>{
   finally{if(btn)btn.disabled=false}
 });
 
+async function saveConsultationPrices(){
+  const prices={
+    individual:{iqd:Number(q('#c1price')?.value||20000),usd:Number(q('#c1usd')?.value||15)},
+    supervision:{iqd:Number(q('#c2price')?.value||100000),usd:Number(q('#c2usd')?.value||75)}
+  };
+  const d=await bridge('save-settings',{consultation_prices:prices});
+  window.wtStoreSettings={...(window.wtStoreSettings||{}),consultation_prices:d.settings?.consultation_prices||prices};
+  updateTicketTypeLabels(window.wtStoreSettings.consultation_prices);
+}
 q('#saveC1')?.addEventListener('click',async()=>{
-  try{await saveStoreSettings();toast('تم حفظ أسعار الاستشارة الفردية')}catch(e){alert(e.message)}
+  try{await saveConsultationPrices();toast('تم حفظ أسعار الاستشارة الفردية')}catch(e){alert(e.message)}
 });
 q('#saveC2')?.addEventListener('click',async()=>{
-  try{await saveStoreSettings();toast('تم حفظ أسعار باقة الإشراف')}catch(e){alert(e.message)}
+  try{await saveConsultationPrices();toast('تم حفظ أسعار باقة الإشراف')}catch(e){alert(e.message)}
 });
 
 q('#clearHomeImage')?.addEventListener('click',()=>{if(q('#homeImage'))q('#homeImage').value=''});
