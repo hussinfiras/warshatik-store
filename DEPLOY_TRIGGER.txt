@@ -1,1 +1,1 @@
-Trigger deployment for reliable homepage category images, centered bold category text, and longer mobile logo animation.
+Trigger deployment for real category background images, centered bold category text, and complete mobile logo animation.
