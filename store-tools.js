@@ -54,6 +54,9 @@ async function loadStoreSettings(){
     if(q('#showCourses'))q('#showCourses').checked=s.show_courses!==false;
     if(q('#showProducts'))q('#showProducts').checked=s.show_products!==false;
     if(q('#showConsultations'))q('#showConsultations').checked=s.show_consultations!==false;
+    window.wtStoreSections=Array.isArray(s.sections)&&s.sections.length?s.sections:[{id:'products',name:'المنتجات',type:'product',visible:s.show_products!==false},{id:'courses',name:'الدورات',type:'course',visible:s.show_courses!==false},{id:'consultations',name:'الاستشارات',type:'consultations',visible:s.show_consultations!==false}];
+    window.refreshItemSectionOptions?.();
+    window.dispatchEvent(new CustomEvent('warsha:sections-loaded',{detail:window.wtStoreSections}));
     updateVisibilityButtons();
     if(q('#waylFeePercent'))q('#waylFeePercent').value=s.wayl_fee_percent??'';
     if(q('#waylFixedIQD'))q('#waylFixedIQD').value=s.wayl_fixed_iqd??'';
@@ -78,6 +81,7 @@ async function saveStoreSettings(extra={}){
     show_courses:q('#showCourses')?.checked??true,
     show_products:q('#showProducts')?.checked??true,
     show_consultations:q('#showConsultations')?.checked??true,
+    sections:window.wtStoreSections||undefined,
     wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),
     wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),
     wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0),
