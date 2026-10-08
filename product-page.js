@@ -2,12 +2,15 @@ document.addEventListener('DOMContentLoaded',async()=>{
   const root=document.getElementById('detailRoot');
   try{
     const storefront=window.storefrontReady?await window.storefrontReady:{digital_warning_default:'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',show_products:true,show_courses:true};
-    let data=window.WARSHA_DATA||{products:[],courses:[]};
+    let data=window.WARSHA_DATA||{products:[],courses:[],items:[]};
     let params=new URLSearchParams(location.search);
-    if(window.catalogRefresh){const fresh=await window.catalogRefresh;if(fresh)data=window.WARSHA_DATA=fresh;}
-    const region=window.regionReady?await window.regionReady:{country:'XX',is_iraq:false};
-    params=new URLSearchParams(location.search);
     const id=params.get('id');
+    let initialAll=window.allCatalogItems?window.allCatalogItems():[...(data.products||[]),...(data.courses||[]),...(data.items||[])];
+    if(!initialAll.some(x=>x.id===id)&&window.catalogRefresh){
+      const fresh=await window.catalogRefresh;
+      if(fresh)data=window.WARSHA_DATA=fresh;
+    }
+    const region=window.regionReady?await window.regionReady:{country:'XX',is_iraq:false};
     const type=params.get('type')||'product';
     const all=window.allCatalogItems?window.allCatalogItems():[...(data.products||[]),...(data.courses||[]),...(data.items||[])];
     const item=all.find(x=>x.id===id);
@@ -47,7 +50,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <span class="category">${item.category||''}</span>
       <h1>${item.title}</h1>
       <p class="desc">${item.description||''}</p>
-      <div class="detail-price">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b><small>بدون دفع</small></span>':moneyLocal(item)}</div>
+      <div class="detail-price">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':moneyLocal(item)}</div>
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
       ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
