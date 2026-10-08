@@ -10,7 +10,7 @@ function renderTickets(list){
   body.innerHTML=(list||[]).map(t=>`<tr>
       <td><strong class="ticket-code">${t.code}</strong></td>
       <td><strong>${t.customer_name}</strong><br><small>${t.contact_method}: ${t.contact_value||'—'}</small></td>
-      <td>${typeText[t.consultation_type]||t.consultation_type}<br><small>${Number(t.amount_iqd||0).toLocaleString('en-US')} د.ع</small></td>
+      <td>${typeText[t.consultation_type]||t.consultation_type}<br><small>${Number(t.amount_iqd||0).toLocaleString('en-US')} د.ع · ${Number(t.amount_usd||0).toFixed(Number(t.amount_usd||0)%1?2:0)}</small></td>
       <td>${t.scheduled_date||'—'}</td>
       <td><span class="ticket-status ticket-${t.status}">${statusText[t.status]||t.status}</span></td>
       <td><select class="ticket-status-select" data-code="${t.code}">
