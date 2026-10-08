@@ -455,3 +455,33 @@ body[data-page="home"] .quick-card{
 .detail-price-sale .old-price{font-size:14px;margin-bottom:5px}
 /* Recommendation cards rendered dynamically should be visible immediately */
 #cartRecommendGrid .product-card{opacity:1!important;transform:none}
+
+/* Homepage category cards: centered, bold labels with visible custom backgrounds */
+.quick-copy{
+  justify-content:center!important;
+  align-items:center;
+  text-align:center;
+  padding:24px;
+}
+.quick-copy h3{
+  margin:0 0 8px;
+  font-size:22px;
+  font-weight:900;
+}
+.quick-copy p{
+  margin:0 0 12px;
+  font-weight:700;
+  line-height:1.75;
+  max-width:280px;
+}
+.quick-copy b{
+  font-weight:900;
+}
+.quick-card.has-custom-bg .quick-copy{
+  background:linear-gradient(180deg,rgba(255,255,255,.48),rgba(255,255,255,.78));
+}
+.quick-card.has-custom-bg .quick-pattern{
+  opacity:1;
+  background-size:cover;
+  background-position:center;
+}
