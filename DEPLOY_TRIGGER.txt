@@ -1,1 +1,1 @@
-Trigger deployment for clearer free pricing and reliable free-file delivery.
+Trigger deployment for admin cache invalidation, immediate item updates, and restored email sender configuration.
