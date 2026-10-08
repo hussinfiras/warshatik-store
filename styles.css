@@ -419,3 +419,23 @@ body[data-page="home"] .quick-card{
 }
 /* Single gated tick prevents partial Tik fragments before the draw begins */
 .wt-tick-group{opacity:0}
+
+/* Restore clean sale price layout while keeping all cards aligned */
+.price-row>div{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:flex-end;
+  min-height:42px;
+}
+.old-price{
+  display:block;
+  font-size:12px;
+  line-height:1.2;
+  margin:0 0 4px;
+  color:#9c95a3;
+  text-decoration:line-through;
+  opacity:.9;
+}
+.price-row strong{line-height:1.15}
+.free-price{min-height:34px}
