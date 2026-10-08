@@ -80,7 +80,8 @@ function setupWarshaLoader(){
   document.body.appendChild(overlay);
   armWarshaTick(overlay);
   const started=performance.now();
-  const hide=()=>{const wait=Math.max(0,1800-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),380)},wait)};
+  const minVisible=(matchMedia('(pointer:coarse)').matches||innerWidth<700)?2350:1800;
+  const hide=()=>{const wait=Math.max(0,minVisible-(performance.now()-started));setTimeout(()=>{overlay.classList.add('done');setTimeout(()=>overlay.remove(),380)},wait)};
   if(document.readyState==='complete')hide();else addEventListener('load',hide,{once:true});
 }
 window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);armWarshaTick(overlay);return overlay};
