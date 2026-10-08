@@ -237,4 +237,4 @@ loadCatalog();
 
 window.openEditor=openEditor;window.editItem=editItem;window.delItem=delItem;
 
-window.loadCatalog=loadCatalog;window.allAdminItems=()=>allItems;
+window.loadCatalog=loadCatalog;window.allAdminItems=()=>allItems;window.render=render;
