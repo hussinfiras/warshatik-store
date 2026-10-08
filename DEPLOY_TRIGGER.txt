@@ -1,1 +1,1 @@
-Trigger deployment for dynamic homepage category card rebuild and faster news rendering.
+Trigger deployment for stable mobile loading, immediate product details, and refreshed store assets.
