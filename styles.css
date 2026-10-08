@@ -388,3 +388,13 @@ body[data-page="home"] .quick-card{
 .store-search{max-width:680px;margin:0 auto 28px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:16px;padding:0 14px;box-shadow:0 8px 28px rgba(40,24,55,.05)}
 .store-search span{font-size:24px;color:#8055c2}
 .store-search input{width:100%;border:0;outline:0;background:transparent;padding:14px 0;font:600 15px Cairo,sans-serif}
+
+/* Clearer free-product pricing */
+.free-price{display:inline-flex;align-items:center;gap:7px;color:#118454;font-weight:900}
+.free-price b{font-size:20px}
+.free-price small{font-size:10px;font-weight:800;background:#e9f8f0;color:#167b52;border:1px solid #c9ead8;border-radius:999px;padding:4px 7px;white-space:nowrap}
+.detail-free b{font-size:28px}
+.detail-free small{font-size:12px}
+.free-mini{display:inline-block;color:#118454;font-weight:900}
+.free-downloads{margin-top:16px;display:flex;flex-direction:column;gap:9px}
+.free-download-link{width:max-content;max-width:100%}
