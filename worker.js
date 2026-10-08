@@ -58,7 +58,7 @@ async function sendPurchaseEmail(env,db,orderId,origin){
   const {results}=await db.prepare('SELECT * FROM order_items WHERE order_id=?').bind(orderId).all();let blocks='';
   for(const it of results){const links=await makeDownloadLinks(env,db,orderId,it.item_id,origin);blocks+=`<h3>${it.title}</h3>${links.length?links.map(l=>`<p><a href="${l.url}">تحميل ${l.name}</a> <small>(الرابط صالح لمدة ساعة)</small></p>`).join(''):'<p>سيتم توفير الملف قريباً.</p>'}`;}
   const recover=`${origin}/recover.html`;
-  return sendEmail(env,order.email,'مشترياتك من ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>شكراً لشرائك من ورشة تك</h2><p>رقم الطلب: <b>${order.id}</b></p>${blocks}<hr><p>حقك في المنتجات لا ينتهي. إذا انتهى رابط التحميل، استخدم صفحة استرجاع المشتريات لإصدار روابط جديدة:</p><p><a href="${recover}">استرجاع مشترياتي</a></p></div>`);
+  const free=Number(order.total||0)===0;return sendEmail(env,order.email,free?'تحميل منتجك المجاني - ورشة تك':'مشترياتك من ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>${free?'منتجك المجاني جاهز للتحميل':'شكراً لشرائك من ورشة تك'}</h2><p>رقم الطلب: <b>${order.id}</b></p>${blocks}<hr><p>حقك في المنتجات لا ينتهي. إذا انتهى رابط التحميل، استخدم صفحة استرجاع المشتريات لإصدار روابط جديدة:</p><p><a href="${recover}">استرجاع مشترياتي</a></p></div>`);
 }
 export default{async fetch(req,env){
   const u=new URL(req.url),origin=u.origin;
@@ -142,8 +142,11 @@ export default{async fetch(req,env){
     const freeOrder=total===0;
     await env.DB.prepare("INSERT INTO orders(id,email,currency,total,payment_status,payment_reference,paid_at) VALUES(?,?,?,?,?,?,?)").bind(orderId,email,currency,total,freeOrder?'paid':'pending',freeOrder?'FREE':null,freeOrder?new Date().toISOString():null).run();
     for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
-    let mail={sent:false};if(freeOrder)mail=await sendPurchaseEmail(env,env.DB,orderId,origin);
-    return json({ok:true,order_id:orderId,email,currency,total,free:freeOrder,email_sent:mail.sent||false,email_reason:mail.reason||null});
+    let mail={sent:false},downloads=[];if(freeOrder){
+      mail=await sendPurchaseEmail(env,env.DB,orderId,origin);
+      for(const it of selected){const links=await makeDownloadLinks(env,env.DB,orderId,it.id,origin);downloads.push(...links.map(l=>({item_id:it.id,item_title:it.title,name:l.name,url:l.url})))}
+    }
+    return json({ok:true,order_id:orderId,email,currency,total,free:freeOrder,email_sent:mail.sent||false,email_reason:mail.reason||null,downloads});
   }
 
   if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
