@@ -383,3 +383,8 @@ body[data-page="home"] .quick-card{
 .consult-step-panel>p{font-size:14px;line-height:1.8}
 .consult-step-panel label{margin-top:16px}
 .consult-step-panel textarea{min-height:120px}
+
+.flag-free{background:#169b62;color:#fff}
+.store-search{max-width:680px;margin:0 auto 28px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:16px;padding:0 14px;box-shadow:0 8px 28px rgba(40,24,55,.05)}
+.store-search span{font-size:24px;color:#8055c2}
+.store-search input{width:100%;border:0;outline:0;background:transparent;padding:14px 0;font:600 15px Cairo,sans-serif}
