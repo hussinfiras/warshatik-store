@@ -1,1 +1,1 @@
-Trigger admin deployment for hardware-only Iraq setting.
+Trigger admin deployment for stable custom-domain API routing and login/session reliability.
