@@ -1,1 +1,1 @@
-Trigger admin deployment for verified category background saving.
+Trigger admin deployment for exchange-rate price conversion controls.
