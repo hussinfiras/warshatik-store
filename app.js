@@ -74,7 +74,7 @@ function updateNetPreview(){
   const free=$('#status')?.value==='free';
   const iqd=Number($('#price_iqd')?.value||0);
   const usd=Number($('#price_usd')?.value||0);
-  const LOCAL_PCT=2.5, INTERNATIONAL_PCT=3.5, FIXED_IQD=600, IQD_PER_USD=1310;
+  const LOCAL_PCT=2.5, INTERNATIONAL_PCT=3.5, FIXED_IQD=600, IQD_PER_USD=currentExchangeRate();
   const fixedUsd=FIXED_IQD/IQD_PER_USD;
   if(free){if($('#netIQD'))$('#netIQD').textContent='مجاني — لا توجد رسوم Wayl';if($('#netUSD'))$('#netUSD').textContent='مجاني — لا توجد رسوم Wayl';return}
   if($('#netIQD')){
@@ -94,8 +94,11 @@ function updateNetPreview(){
 }
 window.updateNetPreview=updateNetPreview;
 
+function currentExchangeRate(){return Number(window.wtStoreSettings?.exchange_rate_iqd_per_usd||document.querySelector('#exchangeRate')?.value||1500)||1500}
+function convertUsdToIqd(usd){return Math.round(Number(usd||0)*currentExchangeRate())}
 $('#price_iqd')?.addEventListener('input',updateNetPreview);
-$('#price_usd')?.addEventListener('input',updateNetPreview);
+$('#price_usd')?.addEventListener('input',()=>{const v=$('#price_usd').value;if(v!=='')$('#price_iqd').value=convertUsdToIqd(v);updateNetPreview()});
+$('#old_usd')?.addEventListener('input',()=>{const v=$('#old_usd').value;if(v!=='')$('#old_iqd').value=convertUsdToIqd(v)});
 $('#status').addEventListener('change',e=>{setStatusText(e.target.value,true);syncSaleFields();updateNetPreview()});
 $('#editStatusText').addEventListener('click',()=>{
   const input=$('#statusText');
@@ -203,7 +206,6 @@ $('#saveC2').onclick=()=>{consultations.c2={price:Number($('#c2price').value),de
 $('#storeName').value=settings.storeName;
 $('#telegram').value=settings.telegram;
 $('#whatsapp').value=settings.whatsapp;
-$('#currency').value=settings.currency;
 $('#apiBase').value=ADMIN_API;$('#apiBase').readOnly=true;settings.apiBase=ADMIN_API;
 $('#adminKey').value=settings.adminKey;
 $('#saveSettings').onclick=()=>{
@@ -211,7 +213,6 @@ $('#saveSettings').onclick=()=>{
     storeName:$('#storeName').value,
     telegram:$('#telegram').value,
     whatsapp:$('#whatsapp').value,
-    currency:$('#currency').value,
     apiBase:ADMIN_API,
     adminKey:$('#adminKey').value
   };
