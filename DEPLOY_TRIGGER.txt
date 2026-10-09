@@ -1,1 +1,1 @@
-Deploy checkout order-creation D1 initialization and structured 500 error handling.
+Deploy Wayl checkout resume payment improvements, reuse existing pending link, and safe new order fallback.
