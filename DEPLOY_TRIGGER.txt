@@ -1,1 +1,1 @@
-Trigger deployment for secure admin email OTP authentication.
+Trigger deployment for admin password plus email OTP security and session-only admin authorization.
