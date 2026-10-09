@@ -7,7 +7,7 @@
     try{
       sel.disabled=true;
       sel.innerHTML='<option value="">جاري تحميل المنتجات...</option>';
-      const r=await fetch((settings?.apiBase||'https://warshatik-store2.hussainfiras23.workers.dev/api').replace(/\/$/,'')+'/catalog');
+      const r=await fetch((settings?.apiBase||'https://warshatik.com/api').replace(/\/$/,'')+'/catalog');
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
       const all=[...(d.products||[]),...(d.courses||[])].filter(x=>x&&x.active!==false&&!['sold','coming'].includes(x.status));
