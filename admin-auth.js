@@ -27,7 +27,7 @@ async function call(path,opt={}){
   const token=getToken();if(token)headers['x-admin-key']=token;
   let lastErr=null;
   for(const base of API_BASES){
-    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),6500);
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),15000);
     try{
       const r=await fetch(base+path,{...opt,headers,signal:ctrl.signal,cache:'no-store'});
       let d={};try{d=await r.json()}catch{}
@@ -91,7 +91,7 @@ async function startAdmin(){
 sendBtn?.addEventListener('click',async()=>{
   const email=String(emailInput?.value||'').trim().toLowerCase(),password=String(passwordInput?.value||'');
   if(!email||!password){setStatus('اكتب البريد الإلكتروني وكلمة المرور أولاً.');return}
-  sendBtn.disabled=true;setStatus('جاري التحقق من الرمز...');
+  sendBtn.disabled=true;setStatus('جاري إرسال رمز الدخول...');
   try{
     const d=await call('/admin/auth/request-code',{method:'POST',body:JSON.stringify({email,password})});
     localStorage.setItem('wt_admin_email',email);
