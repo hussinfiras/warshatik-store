@@ -1,1 +1,1 @@
-Trigger deployment for product detail crash fix and faster recovery/auth endpoints.
+Trigger deployment for software/hardware package selection, package pricing, package features, cart, checkout, and delivery behavior.
