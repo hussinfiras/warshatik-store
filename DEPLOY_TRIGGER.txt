@@ -1,1 +1,1 @@
-Trigger deployment for automatic regional currency, hidden coming-soon prices, and admin exchange-rate conversion.
+Trigger deployment for Wayl payment links, signed webhook verification, payment return verification, and consultation payments.
