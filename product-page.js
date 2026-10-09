@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }
 
     const moneyLocal=(i,old=false)=>{
-      const cur=localStorage.getItem('warsha-currency')||'IQD';
+      const cur=window.currency?window.currency():'IQD';
       const usd=cur==='USD';
       const n=usd?(old?i.old_price_usd:i.price_usd):(old?i.old_price_iqd:i.price_iqd);
       if(n==null)return '';
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <span class="category">${item.category||''}</span>
       <h1>${item.title}</h1>
       <p class="desc">${item.description||''}</p>
-      <div class="detail-price ${item.status==='sale'?'detail-price-sale':''}">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':`<strong>${moneyLocal(item)}</strong>`}</div>
+${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'detail-price-sale':''}">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':`<strong>${moneyLocal(item)}</strong>`}</div>`}
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
       ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
