@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
 
+    const regionalPriceHtml=()=>item.status==='coming'?'':(item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':`<strong>${moneyLocal(item)}</strong>`);
+    const regionalOldHtml=()=>item.status==='sale'&&((window.currency?window.currency():'IQD')==='USD'?item.old_price_usd:item.old_price_iqd)?`<small class="old-price">${moneyLocal(item,true)}</small>`:'';
     root.innerHTML=`<div class="reveal">
       <div class="gallery-main" id="mainGallery">
         ${item.statusText?`<span class="${statusClassLocal(item.status)}">${item.statusText}</span>`:''}
@@ -51,7 +53,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       <span class="category">${item.category||''}</span>
       <h1>${item.title}</h1>
       <p class="desc">${item.description||''}</p>
-${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'detail-price-sale':''}">${item.status==='sale'&&item.old_price_iqd?`<small class="old-price">${moneyLocal(item,true)}</small>`:''}${item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':`<strong>${moneyLocal(item)}</strong>`}</div>`}
+${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'detail-price-sale':''}">${regionalOldHtml()}${regionalPriceHtml()}</div>`}
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
       ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
@@ -63,6 +65,11 @@ ${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'de
       <p id="cartMessage" style="color:#8055c2;font-weight:700;margin-top:12px"></p>
     </div>`;
 
+    window.addEventListener('warsha:currency-ready',()=>{
+      if(item.status==='coming')return;
+      const box=root.querySelector('.detail-price');
+      if(box)box.innerHTML=regionalOldHtml()+regionalPriceHtml();
+    },{once:true});
     document.querySelectorAll('[data-image]').forEach(b=>b.onclick=()=>{
       const img=document.getElementById('mainProductImage');
       if(img)img.src=b.dataset.image;
