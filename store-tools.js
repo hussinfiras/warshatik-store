@@ -1,31 +1,34 @@
 (()=>{
 const q=s=>document.querySelector(s);
-const ADMIN_API='https://warshatik.com/api';
+const API_BASES=['https://warshatik-store2.hussainfiras23.workers.dev/api','https://warshatik.com/api'];
+const ADMIN_API=API_BASES[0];
 
 async function bridge(action,payload){
   const key=(q('#adminKey')?.value||settings.adminKey||'').trim();
   if(!key)throw new Error('Admin API Key غير موجود');
-  const ctrl=new AbortController();
-  const timer=setTimeout(()=>ctrl.abort(),10000);
-  try{
-    const r=await fetch(ADMIN_API+'/admin/bridge',{
-      method:'POST',
-      headers:{'content-type':'text/plain;charset=UTF-8'},
-      body:JSON.stringify({admin_key:key,action,payload}),
-      signal:ctrl.signal
-    });
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
-    settings.apiBase=ADMIN_API;
-    settings.adminKey=key;
-    localStorage.setItem('wt_settings',JSON.stringify(settings));
-    const apiInput=q('#apiBase');
-    if(apiInput){apiInput.value=ADMIN_API;apiInput.readOnly=true}
-    return d;
-  }catch(e){
-    if(e?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
-    throw e;
-  }finally{clearTimeout(timer)}
+  let lastErr=null;
+  for(const base of API_BASES){
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
+    try{
+      const r=await fetch(base+'/admin/bridge',{
+        method:'POST',
+        headers:{'content-type':'text/plain;charset=UTF-8'},
+        body:JSON.stringify({admin_key:key,action,payload}),
+        signal:ctrl.signal
+      });
+      let d={};try{d=await r.json()}catch{}
+      if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+      settings.apiBase=base;settings.adminKey=key;
+      localStorage.setItem('wt_settings',JSON.stringify(settings));
+      const apiInput=q('#apiBase');if(apiInput){apiInput.value=base;apiInput.readOnly=true}
+      return d;
+    }catch(e){
+      lastErr=e;
+      if(e.message==='Unauthorized'||/^HTTP 4\d\d/.test(e.message))throw e;
+    }finally{clearTimeout(timer)}
+  }
+  if(lastErr?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
+  throw new Error(lastErr?.message||'فشل الاتصال بالخادم');
 }
 window.adminBridge=bridge;
 
@@ -212,8 +215,16 @@ async function uploadImage(file,itemId){
     'x-file-kind':'image',
     'x-item-id':itemId
   };
-  const r=await fetch(ADMIN_API+'/uploads',{method:'POST',headers,body:file});
-  const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;
+  let lastErr=null;
+  for(const base of API_BASES){
+    try{
+      const r=await fetch(base+'/uploads',{method:'POST',headers,body:file});
+      let d={};try{d=await r.json()}catch{}
+      if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+      return d;
+    }catch(e){lastErr=e}
+  }
+  throw new Error(lastErr?.message||'فشل رفع الصورة');
 }
 
 q('#homeImageInput')?.addEventListener('change',async e=>{
