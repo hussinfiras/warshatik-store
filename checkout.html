@@ -1,32 +1,24 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#8055c2"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css?v=20261009m"><title>إتمام الطلب | ورشة تك</title></head><body data-page="checkout"><header><div class="container nav"><a class="brand" href="index.html"><div class="logo">WT</div><span><strong>ورشة تك</strong><small>warshaTik</small></span></a><nav class="nav-links" id="navLinks"><a data-page="home" href="index.html">الرئيسية</a><a data-page="courses" href="courses.html">الدورات</a><a data-page="products" href="products.html">المنتجات</a><a data-page="consultations" href="consultations.html">الاستشارات</a></nav><div class="nav-actions"><button class="menu-btn" id="menuButton" aria-label="القائمة"><i></i><i></i><i></i></button></div></div></header><main><section class="page-hero"><div class="container"><span class="kicker">إتمام الطلب</span><h1>بيانات المشتري</h1><p>استخدم بريداً يمكنك الوصول إليه دائماً، لأنه سيكون مفتاح استرجاع مشترياتك لاحقاً.</p></div></section><section class="section" style="padding-top:20px"><div class="container checkout-grid"><form class="checkout-card" id="checkoutForm"><h2>بيانات المشتري</h2><label>الاسم الكامل<input id="checkoutName" type="text" required minlength="2" autocomplete="name" placeholder="الاسم الكامل"></label><label>البريد المستخدم للشراء<input id="checkoutEmail" type="email" required autocomplete="email" placeholder="name@example.com"></label><div class="security-note" id="checkoutNote">لن تحتاج إلى إنشاء حساب. هذا البريد سيُستخدم لإرسال ملفاتك واسترجاع مشترياتك لاحقاً.</div><button class="btn btn-primary" id="prepareOrderBtn" type="submit">تجهيز الطلب</button><p id="checkoutStatus" class="checkout-status"></p></form><aside class="cart-summary"><h2>ملخص الطلب</h2><div id="checkoutItems"></div><div class="summary-line total"><span>الإجمالي</span><strong id="checkoutTotal">0</strong></div><a class="btn btn-ghost" href="cart.html">الرجوع إلى السلة</a></aside></div><div class="container" id="orderResult" style="margin-top:22px"></div></section></main><footer><div class="container footer-grid"><div><a class="brand" href="index.html"><div class="logo">WT</div><span><strong>ورشة تك</strong><small>warshaTik</small></span></a><p>مشاريع، أكواد ودورات إلكترونيات بالعربي.</p></div><div><strong>روابط</strong><a href="recover.html">استرجاع المشتريات</a><a href="products.html">المنتجات</a></div><div><strong>تواصل</strong><a href="https://t.me/HW2DMbot" target="_blank" rel="noopener">Telegram</a></div></div><div class="container copy">© 2026 ورشة تك | warshaTik</div></footer><script src="products.js"></script><script src="shared.js?v=20261010a"></script><script>let checkoutItems=[],checkoutRegion={country:'XX',is_iraq:false};
-const API_FALLBACK='https://warshatik-store2.hussainfiras23.workers.dev';
 async function apiJson(path,options={}){
-  const targets=path.startsWith('/api/')?[path,API_FALLBACK+path]:[path];
-  let lastError=null;
-  for(const target of targets){
-    const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),15000);
-    try{
-      const r=await fetch(target,{...options,signal:controller.signal,cache:'no-store'});
-      const text=await r.text();
-      let d=null;
-      try{d=JSON.parse(text)}catch{
-        throw new Error((r.headers.get('content-type')||'').includes('text/html')?'الخادم أعاد صفحة بدلاً من بيانات.':'استجابة غير صالحة من الخادم.');
-      }
-      if(!r.ok)throw new Error(d.error||d.message||('HTTP '+r.status));
-      return d;
-    }catch(e){
-      lastError=e;
-      if(target===targets[targets.length-1]){
-        if(e?.name==='AbortError')throw new Error('انتهت مهلة الاتصال بالخادم. حاول مرة أخرى.');
-        if(e instanceof TypeError)throw new Error('تعذر الاتصال بالخادم. تحقق من الاتصال وحاول مرة أخرى.');
-        throw e;
-      }
-    }finally{
-      clearTimeout(timer);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),15000);
+  try{
+    const response=await fetch(path,{...options,signal:controller.signal,cache:'no-store'});
+    const raw=await response.text();
+    let data;
+    try{data=JSON.parse(raw)}
+    catch{
+      throw new Error(response.status>=500
+        ?'حدث خطأ داخلي في خادم المتجر (HTTP '+response.status+').'
+        :'الخادم أعاد استجابة غير صالحة (HTTP '+response.status+').');
     }
-  }
-  throw lastError||new Error('تعذر الاتصال بالخادم.');
+    if(!response.ok)throw new Error(data.error||data.message||'خطأ من الخادم (HTTP '+response.status+')');
+    return data;
+  }catch(error){
+    if(error?.name==='AbortError')throw new Error('انتهت مهلة الاتصال بخادم المتجر. حاول مرة أخرى.');
+    if(error instanceof TypeError)throw new Error('تعذر الاتصال بخادم المتجر مباشرة. تحقق من الشبكة أو إعدادات Cloudflare.');
+    throw error;
+  }finally{clearTimeout(timer)}
 }
 
 function checkoutPackagePrice(item){
