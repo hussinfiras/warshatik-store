@@ -35,7 +35,9 @@ document.addEventListener('DOMContentLoaded',async()=>{
 
     document.title=item.title+' | ورشة تك';
     let blockedByRegion=false;
-    const disabled=['sold','coming'].includes(item.status)||blockedByRegion;
+    const files=(item.files||[]).filter(f=>f&&(typeof f==='string'||f.key||f.url));
+    const missingDigitalFile=item.digitalOnly!==false&&item.status!=='free'&&!['sold','coming'].includes(item.status)&&files.length===0;
+    const disabled=['sold','coming'].includes(item.status)||blockedByRegion||missingDigitalFile;
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
 
@@ -57,7 +59,7 @@ ${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'de
       <ul class="feature-list">${(item.features||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
       ${item.digitalOnly!==false?`<div class="digital-warning"><strong>تنبيه</strong><span>${storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.'}</span></div>`:''}
       ${item.iraqOnly?`<div class="iraq-warning"><strong>العراق فقط</strong><span>هذا المنتج متاح للشراء داخل العراق فقط.</span></div>`:''}
-      ${(item.files||[]).length?`<div class="download-note">يتضمن هذا المنتج ${item.files.length} ملف/ملفات رقمية. ${item.status==='free'?'أدخل بريدك لإكمال الطلب واستلام الملفات مباشرة.':'تصبح روابط التحميل متاحة بعد إكمال الدفع.'}</div>`:''}
+      ${files.length?`<div class="download-note">يتضمن هذا المنتج ${files.length} ملف/ملفات رقمية. ${item.status==='free'?'أدخل بريدك لإكمال الطلب واستلام الملفات مباشرة.':'تصبح روابط التحميل متاحة بعد إكمال الدفع.'}</div>`:(missingDigitalFile?'<div class="digital-warning"><strong>غير متاح حالياً</strong><span>لم تتم إضافة ملف التحميل لهذا المنتج بعد.</span></div>':'')}
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px">
         <button id="addCartBtn" class="btn btn-primary" ${disabled?'disabled style="opacity:.45;cursor:not-allowed"':''}>${blockedByRegion?'متاح داخل العراق فقط':(missingDigitalFile?'غير متاح حالياً':(disabled?(item.status==='sold'?'غير متوفر حالياً':'قريباً'):(item.status==='free'?'احصل عليه مجاناً':'أضف للسلة')))}</button>
         <a class="btn btn-ghost" href="${item.type==='course'?'courses.html':item.type==='product'?'products.html':'section.html?id='+encodeURIComponent((storefront.sections||[]).find(s=>s.type===item.type)?.id||'')}">رجوع</a>
