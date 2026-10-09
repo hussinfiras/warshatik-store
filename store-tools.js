@@ -1,6 +1,6 @@
 (()=>{
 const q=s=>document.querySelector(s);
-const API_BASES=['https://warshatik-store2.hussainfiras23.workers.dev/api','https://warshatik.com/api'];
+const API_BASES=['https://warshatik.com/api','https://warshatik-store2.hussainfiras23.workers.dev/api'];
 const ADMIN_API=API_BASES[0];
 
 async function bridge(action,payload){
@@ -8,7 +8,7 @@ async function bridge(action,payload){
   if(!key)throw new Error('Admin API Key غير موجود');
   let lastErr=null;
   for(const base of API_BASES){
-    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),8000);
     try{
       const r=await fetch(base+'/admin/bridge',{
         method:'POST',
