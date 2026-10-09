@@ -48,7 +48,7 @@ q('#validateConsultTicket')?.addEventListener('click',async()=>{
       setStep(3);return;
     }
     result.innerHTML=`<div class="ticket-valid"><strong>✓ التذكرة صحيحة</strong><p><b>الاسم:</b> ${t.customer_name}</p><p><b>التاريخ:</b> ${t.scheduled_date}</p><p><b>المبلغ:</b> ${ticketMoney(t)}</p></div>`;
-    paymentBox.innerHTML=`<div class="ticket-valid"><strong>التذكرة جاهزة للدفع</strong><p>${t.customer_name}</p><p>${ticketMoney(t)}</p><button class="btn btn-primary" type="button" id="startConsultPayment">المتابعة إلى الدفع</button><p class="hint">سيتم ربط هذا الزر ببوابة Wayl عند تفعيل الدفع النهائي.</p></div>`;
+    paymentBox.innerHTML=`<div class="ticket-valid"><strong>التذكرة جاهزة للدفع</strong><p>${t.customer_name}</p><p>${ticketMoney(t)}</p><button class="btn btn-primary" type="button" id="startConsultPayment">المتابعة إلى الدفع</button><p class="hint">سيتم تحويلك الآن إلى بوابة Wayl لإكمال الدفع بأمان.</p></div>`;
     setStep(3);
     q('#startConsultPayment')?.addEventListener('click',async()=>{
       const payBtn=q('#startConsultPayment');payBtn.disabled=true;
