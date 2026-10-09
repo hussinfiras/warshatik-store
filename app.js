@@ -74,7 +74,7 @@ function updateNetPreview(){
   const free=$('#status')?.value==='free';
   const iqd=Number($('#price_iqd')?.value||0);
   const usd=Number($('#price_usd')?.value||0);
-  const LOCAL_PCT=2.5, INTERNATIONAL_PCT=3.5, FIXED_IQD=600, IQD_PER_USD=currentExchangeRate();
+  const LOCAL_PCT=3.5, INTERNATIONAL_PCT=3.5, FIXED_IQD=600, IQD_PER_USD=currentExchangeRate();
   const fixedUsd=FIXED_IQD/IQD_PER_USD;
   if(free){if($('#netIQD'))$('#netIQD').textContent='مجاني — لا توجد رسوم Wayl';if($('#netUSD'))$('#netUSD').textContent='مجاني — لا توجد رسوم Wayl';return}
   if($('#netIQD')){
