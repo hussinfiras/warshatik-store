@@ -26,7 +26,7 @@
   if(!email){r$('#msg1').textContent='اكتب البريد الإلكتروني أولاً.';return}
   btn.disabled=true;btn.textContent='جاري الإرسال...';r$('#msg1').textContent='';
   try{
-    const ctrl=new AbortController(),tm=setTimeout(()=>ctrl.abort(),7000);const res=await fetch('/api/recovery/request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email}),signal:ctrl.signal});clearTimeout(tm);
+    const ctrl=new AbortController(),tm=setTimeout(()=>ctrl.abort(),25000);const res=await fetch('/api/recovery/request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email}),signal:ctrl.signal});clearTimeout(tm);
     const d=await res.json();
     if(!res.ok)throw new Error(d.reason||d.error||'تعذر إرسال البريد');
     r$('#msg1').textContent=d.message||'إذا كان البريد مرتبطاً بمشتريات، سيصلك رمز.';
