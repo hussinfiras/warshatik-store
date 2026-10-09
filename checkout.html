@@ -44,6 +44,21 @@ async function loadCheckout(){
   if(blocked.length){const status=document.getElementById('checkoutStatus'),btn=document.getElementById('prepareOrderBtn');status.textContent='❌ يحتوي الطلب على منتج متاح داخل العراق فقط: '+blocked.map(x=>x.title).join('، ');btn.disabled=true;btn.textContent='غير متاح خارج العراق'}
 }
 
+async function resumeWaylPayment(orderId,button){
+  if(button){button.disabled=true;button.textContent='جاري فتح Wayl...'}
+  try{
+    const d=await apiJson('/api/payments/wayl/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({order_id:orderId})});
+    if(d.paid){location.assign('checkout.html?wayl_order='+encodeURIComponent(orderId));return}
+    if(!d.url)throw Error('رابط الدفع غير متاح حالياً. يمكنك بدء طلب جديد.');
+    const target=new URL(d.url,location.href);
+    if(target.protocol!=='https:')throw Error('رابط دفع غير آمن');
+    location.assign(target.href);
+  }catch(error){
+    const warning=document.getElementById('waylResumeError');
+    if(warning)warning.textContent='❌ '+(error.message||'تعذر فتح Wayl');
+    if(button){button.disabled=false;button.textContent='إكمال الدفع'}
+  }
+}
 async function handleWaylReturn(){
   const qs=new URLSearchParams(location.search);
   const queryOrder=String(qs.get('wayl_order')||'').trim();
@@ -53,17 +68,29 @@ async function handleWaylReturn(){
   const form=document.getElementById('checkoutForm'),summary=document.querySelector('.cart-summary'),result=document.getElementById('orderResult');
   if(form)form.style.display='none';if(summary)summary.style.display='none';
   result.innerHTML='<div class="order-ready"><h2>جاري التحقق من الدفع...</h2><p>يرجى الانتظار لحظة.</p></div>';
+  const newOrder=()=>{
+    localStorage.removeItem('warsha-wayl-order');
+    location.assign('checkout.html');
+  };
   try{
     const d=await apiJson('/api/payments/wayl/status?order_id='+encodeURIComponent(orderId),{cache:'no-store'});
     if(d.paid){
       clearCart();localStorage.removeItem('warsha-wayl-order');
       result.innerHTML='<div class="order-ready"><h2>تم الدفع بنجاح ✓</h2><p>رقم الطلب: <strong>'+String(d.order_id||orderId)+'</strong></p><div class="security-note">تم تأكيد الدفع وإرسال ملفاتك إلى البريد الإلكتروني.</div><a class="btn btn-primary" href="recover.html">استرجاع مشترياتي</a></div>';
     }else{
-      result.innerHTML='<div class="order-ready"><h2>الدفع لم يكتمل بعد</h2><p>الحالة: <strong>'+String(d.wayl_status||d.status||'قيد المعالجة')+'</strong></p><button class="btn btn-primary" id="checkWaylAgain">تحقق مرة أخرى</button></div>';
-      document.getElementById('checkWaylAgain')?.addEventListener('click',()=>location.reload());
+      const state=String(d.wayl_status||d.status||'قيد المعالجة');
+      result.innerHTML='<div class="order-ready"><h2>الدفع لم يكتمل بعد</h2><p>الحالة: <strong id="waylPaymentStatus"></strong></p><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn btn-primary" id="resumeWaylPayment">إكمال الدفع</button><button class="btn btn-ghost" id="checkWaylAgain">تحقق مرة أخرى</button><button class="btn btn-ghost" id="startFreshOrder">بدء طلب جديد</button></div><p id="waylResumeError" role="alert" style="color:#b42336"></p></div>';
+      document.getElementById('waylPaymentStatus').textContent=state;
+      document.getElementById('resumeWaylPayment').onclick=e=>resumeWaylPayment(orderId,e.currentTarget);
+      document.getElementById('checkWaylAgain').onclick=()=>location.reload();
+      document.getElementById('startFreshOrder').onclick=newOrder;
     }
-  }catch(e){
-    result.innerHTML='<div class="order-ready"><h2>تعذر التحقق من الدفع</h2><p>'+String(e.message||e)+'</p><button class="btn btn-primary" onclick="location.reload()">إعادة المحاولة</button></div>';
+  }catch(error){
+    result.innerHTML='<div class="order-ready"><h2>تعذر التحقق من الدفع</h2><p id="waylCheckError"></p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" id="retryWaylCheck">إعادة التحقق</button><button class="btn btn-ghost" id="resumeWaylPayment">إكمال الدفع</button><button class="btn btn-ghost" id="startFreshOrder">بدء طلب جديد</button></div><p id="waylResumeError" role="alert" style="color:#b42336"></p></div>';
+    document.getElementById('waylCheckError').textContent=error.message||'تعذر الاتصال';
+    document.getElementById('retryWaylCheck').onclick=()=>location.reload();
+    document.getElementById('resumeWaylPayment').onclick=e=>resumeWaylPayment(orderId,e.currentTarget);
+    document.getElementById('startFreshOrder').onclick=newOrder;
   }
   return true;
 }
