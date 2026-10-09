@@ -1,1 +1,1 @@
-Trigger deployment for checkout API fallback and stable Worker-origin catalog/storefront requests.
+Deploy checkout fix: show real server errors and remove cross-origin fallback masking failed orders.
