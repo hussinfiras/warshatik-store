@@ -1,1 +1,1 @@
-Trigger admin deployment for exchange-rate price conversion controls.
+Trigger admin deployment for exchange-rate price conversion.
