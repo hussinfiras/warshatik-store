@@ -268,10 +268,18 @@ export default{async fetch(req,env){
 
   if(u.pathname==='/api/payments/wayl/status'&&req.method==='GET'){
     try{
-      const orderId=String(u.searchParams.get('order_id')||'');
-      if(!orderId)return json({error:'Missing order_id'},400);
-      const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      const supplied=String(u.searchParams.get('order_id')||'').trim();
+      if(!supplied)return json({error:'Missing order_id'},400);
+      let order=await env.DB.prepare('SELECT * FROM orders WHERE id=? OR wayl_link_id=? OR wayl_code=? OR payment_reference=? LIMIT 1').bind(supplied,supplied,supplied,supplied).first();
+      if(!order){
+        try{
+          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(supplied))).data;
+          const ref=String(current?.referenceId||'');
+          if(ref)order=await env.DB.prepare('SELECT * FROM orders WHERE id=? LIMIT 1').bind(ref).first();
+        }catch{}
+      }
       if(!order)return json({error:'Order not found'},404);
+      const orderId=order.id;
       if(order.payment_status==='paid')return json({ok:true,paid:true,order_id:orderId});
       const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
       const out=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
