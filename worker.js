@@ -31,6 +31,8 @@ async function init(db){
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS store_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS admin_login_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS admin_sessions(token_hash TEXT PRIMARY KEY,email TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
   const c=await db.prepare('SELECT COUNT(*) c FROM items').first();
   if(Number(c.c)===0){for(const x of SEED)await db.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`).bind(x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],JSON.stringify(x[12]),JSON.stringify(x[13]),JSON.stringify(x[14]),x[15],x[16],x[17]).run();}
 }
@@ -41,7 +43,21 @@ function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fa
 function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,keywords:safeParse(r.keywords),features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
 async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
-function isAdmin(req,env){const expected=String(env.ADMIN_KEY||'').trim();const provided=String(req.headers.get('x-admin-key')||'').trim();return !!expected&&provided===expected}
+async function isAdminCredential(provided,env,db){
+  const value=String(provided||'').trim();
+  if(!value)return false;
+  const expected=String(env.ADMIN_KEY||'').trim();
+  if(expected&&value===expected)return true;
+  if(!value.startsWith('wta_'))return false;
+  const h=await hashText(value),now=Date.now();
+  const s=await db.prepare('SELECT 1 ok FROM admin_sessions WHERE token_hash=? AND expires_at>?').bind(h,now).first();
+  return !!s;
+}
+async function isAdmin(req,env,db){return isAdminCredential(req.headers.get('x-admin-key'),env,db)}
+function secureSixDigitCode(){
+  const a=new Uint32Array(1);crypto.getRandomValues(a);
+  return String(100000+(a[0]%900000)).padStart(6,'0');
+}
 async function clearStoreCaches(origin){
   const cache=globalThis.caches?.default;if(!cache)return;
   try{await cache.delete(new Request(origin+'/api/catalog-cache'))}catch{}
@@ -301,10 +317,53 @@ export default{async fetch(req,env){
     }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
   }
 
+  if(u.pathname==='/api/admin/auth/request-code'&&req.method==='POST'){
+    const b=await req.json(),email=normEmail(b.email),allowed=normEmail(env.ADMIN_EMAIL||'');
+    if(!allowed)return json({error:'ADMIN_EMAIL missing in Cloudflare Worker'},503);
+    if(!validEmail(email))return json({error:'Invalid email'},400);
+    const generic={ok:true,message:'إذا كان البريد مخولاً، سيتم إرسال رمز التحقق.'};
+    if(email!==allowed)return json(generic);
+    const now=Date.now();
+    const recent=await env.DB.prepare('SELECT created_at FROM admin_login_codes WHERE email=? ORDER BY created_at DESC LIMIT 1').bind(email).first();
+    if(recent&&now-Number(recent.created_at||0)<60000)return json({ok:true,message:'تم إرسال رمز مؤخراً. انتظر دقيقة قبل طلب رمز جديد.'});
+    const code=secureSixDigitCode(),hash=await hashText(code);
+    await env.DB.prepare('DELETE FROM admin_login_codes WHERE email=?').bind(email).run();
+    await env.DB.prepare('INSERT INTO admin_login_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,hash,now+10*60*1000,now).run();
+    const mail=await sendEmail(env,email,'رمز دخول لوحة تحكم ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>رمز دخول لوحة التحكم</h2><p style="font-size:32px;font-weight:800;letter-spacing:5px">${code}</p><p>الرمز صالح لمدة 10 دقائق. إذا لم تطلب تسجيل الدخول فتجاهل الرسالة.</p></div>`);
+    if(!mail.sent)return json({error:mail.reason||'Email failed'},502);
+    return json({ok:true,message:'تم إرسال رمز التحقق إلى بريدك.'});
+  }
+
+  if(u.pathname==='/api/admin/auth/verify-code'&&req.method==='POST'){
+    const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').replace(/\D/g,''),allowed=normEmail(env.ADMIN_EMAIL||''),now=Date.now();
+    if(!allowed||email!==allowed||code.length!==6)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
+    const hash=await hashText(code);
+    const rec=await env.DB.prepare('SELECT id FROM admin_login_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,hash,now).first();
+    if(!rec)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
+    const token='wta_'+randomToken(32),tokenHash=await hashText(token),expires=now+7*24*60*60*1000;
+    await Promise.all([
+      env.DB.prepare('UPDATE admin_login_codes SET used_at=? WHERE id=?').bind(now,rec.id).run(),
+      env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at<=?').bind(now).run(),
+      env.DB.prepare('INSERT INTO admin_sessions(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(tokenHash,email,expires,now).run()
+    ]);
+    return json({ok:true,token,expires_at:expires,email});
+  }
+
+  if(u.pathname==='/api/admin/auth/session'&&req.method==='GET'){
+    const ok=await isAdmin(req,env,env.DB);
+    return json({ok,expires:false},ok?200:401);
+  }
+
+  if(u.pathname==='/api/admin/auth/logout'&&req.method==='POST'){
+    const token=String(req.headers.get('x-admin-key')||'').trim();
+    if(token.startsWith('wta_')){const h=await hashText(token);await env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash=?').bind(h).run()}
+    return json({ok:true});
+  }
+
   if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
 
   if(u.pathname==='/api/storefront'&&req.method==='GET'){
-    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/storefront-cache'),adminRequest=isAdmin(req,env),fresh=u.searchParams.get('fresh')==='1';
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/storefront-cache'),adminRequest=await isAdmin(req,env,env.DB),fresh=u.searchParams.get('fresh')==='1';
     if(cache&&!adminRequest&&!fresh){const hit=await cache.match(cacheKey);if(hit)return hit}
     const s=await getSettings(env.DB);
     const response=json({
@@ -332,7 +391,7 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/catalog'&&req.method==='GET'){
-    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache'),adminRequest=isAdmin(req,env),fresh=u.searchParams.get('fresh')==='1';
+    const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/catalog-cache'),adminRequest=await isAdmin(req,env,env.DB),fresh=u.searchParams.get('fresh')==='1';
     if(cache&&!adminRequest&&!fresh){
       const hit=await cache.match(cacheKey);
       if(hit)return hit;
@@ -424,7 +483,7 @@ export default{async fetch(req,env){
   if(u.pathname==='/api/admin/bridge'&&req.method==='POST'){
     let b={};
     try{b=JSON.parse(await req.text())}catch{return json({error:'Invalid request'},400)}
-    const expectedAdminKey=String(env.ADMIN_KEY||'').trim();const providedAdminKey=String(b.admin_key||'').trim();if(!expectedAdminKey||providedAdminKey!==expectedAdminKey)return json({error:'Unauthorized'},401);
+    const providedAdminKey=String(b.admin_key||'').trim();if(!(await isAdminCredential(providedAdminKey,env,env.DB)))return json({error:'Unauthorized'},401);
     if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
     if(b.action==='save-settings'){
       const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices','exchange_rate_iqd_per_usd'];
@@ -435,7 +494,7 @@ export default{async fetch(req,env){
     if(b.action==='health'){
       let db_ok=false,r2_ok=!!env.MEDIA;
       try{await env.DB.prepare('SELECT 1 x').first();db_ok=true}catch{}
-      return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},wayl:{token:!!env.WAYL_API_TOKEN,webhook_secret:!!env.WAYL_WEBHOOK_SECRET,env:waylEnv(env)},admin_key:!!env.ADMIN_KEY});
+      return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},wayl:{token:!!env.WAYL_API_TOKEN,webhook_secret:!!env.WAYL_WEBHOOK_SECRET,env:waylEnv(env)},admin_email:!!env.ADMIN_EMAIL,admin_key:!!env.ADMIN_KEY});
     }
     if(b.action==='stats'){
       const s=await getSettings(env.DB),resetAt=s.stats_reset_at||'1970-01-01T00:00:00Z';
@@ -500,7 +559,7 @@ export default{async fetch(req,env){
     return json({error:'Unknown action'},400);
   }
 
-  if(!isAdmin(req,env))return json({error:'Unauthorized'},401);
+  if(!(await isAdmin(req,env,env.DB)))return json({error:'Unauthorized'},401);
 
   if(u.pathname==='/api/admin/settings'&&req.method==='GET'){
     return json({settings:await getSettings(env.DB)});
