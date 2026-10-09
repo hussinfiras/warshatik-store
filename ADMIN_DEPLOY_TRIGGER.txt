@@ -1,1 +1,1 @@
-Trigger admin deployment for email OTP login protection.
+Trigger admin deployment for password plus email-code login.
