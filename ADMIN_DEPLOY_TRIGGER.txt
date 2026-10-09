@@ -1,1 +1,1 @@
-Trigger admin deployment for login timeout and API fallback fix.
+Trigger admin deployment for faster two-step login verification.
