@@ -133,19 +133,25 @@ async function recoveryDownloadsFromFiles(env,db,orderId,itemId,title,filesValue
   }));
 }
 async function fastRecoveryVerify(req,env,origin){
-  const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now();
-  if(!validEmail(email)||!/^[0-9]{6}$/.test(code))return json({error:'Invalid or expired code'},400);
-  const h=await hashText(code);
+  const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);
   const rec=await env.DB.prepare('SELECT id FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();
   if(!rec)return json({error:'Invalid or expired code'},400);
-  const rows=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY datetime(COALESCE(o.paid_at,o.created_at)) DESC").bind(email).all();
-  await env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id).run();
-  const items=await Promise.all((rows.results||[]).map(async it=>{
-    const parsed=safeParse(it.files);
-    if(!parsed.some(f=>f?.key))return {order_id:it.order_id,item_id:it.item_id,title:it.title,downloads:[]};
-    return {order_id:it.order_id,item_id:it.item_id,title:it.title,downloads:await recoveryDownloadsFromFiles(env,env.DB,it.order_id,it.item_id,it.title,it.files,origin)};
-  }));
-  return json({ok:true,items},200,{'cache-control':'no-store'});
+  const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();
+  const exp=now+60*60*1000,items=[],statements=[env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id)];
+  for(const it of results||[]){
+    const files=safeParse(it.files),downloads=[];
+    const generated=await Promise.all(files.filter(f=>f?.key).map(async f=>{
+      const raw=randomToken(32),hash=await hashText(raw),name=f.name||`${it.title}.zip`;
+      return {raw,hash,name,key:f.key};
+    }));
+    for(const g of generated){
+      statements.push(env.DB.prepare('INSERT INTO download_tokens(token_hash,order_id,item_id,file_key,file_name,expires_at,created_at) VALUES(?,?,?,?,?,?,?)').bind(g.hash,it.order_id,it.item_id,g.key,g.name,exp,now));
+      downloads.push({name:g.name,url:`${origin}/api/download/${g.raw}`,expires_at:exp});
+    }
+    items.push({order_id:it.order_id,item_id:it.item_id,title:it.title,downloads});
+  }
+  await env.DB.batch(statements);
+  return json({ok:true,items});
 }
 function waylConfigured(env){return !!env.WAYL_API_TOKEN&&!!env.WAYL_WEBHOOK_SECRET}
 function waylEnv(env){return String(env.WAYL_ENV||'test').toLowerCase()==='live'?'live':'test'}
@@ -232,7 +238,7 @@ async function sendPurchaseEmail(env,db,orderId,origin){
   try{await db.prepare('UPDATE orders SET delivery_email_sent=?,delivery_email_last_error=? WHERE id=?').bind(mail.sent?1:0,mail.sent?null:String(mail.reason||'Email failed').slice(0,500),orderId).run()}catch{}
   return mail;
 }
-export default{async fetch(req,env){
+export default{async fetch(req,env,ctx){
   const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
   if(!u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/media/')){
@@ -246,161 +252,6 @@ export default{async fetch(req,env){
       headers.set('x-warshatik-build','20261008r2');
     }
     return new Response(asset.body,{status:asset.status,statusText:asset.statusText,headers});
-  }
-
-  if(u.pathname==='/api/recovery/verify'&&req.method==='POST'){
-    try{
-      await ensureInit(env.DB);
-      return await fastRecoveryVerify(req,env,origin);
-    }catch(e){
-      return json({error:e?.message||'Recovery verification failed'},500);
-    }
-  }
-
-  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
-    const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
-    if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
-    try{
-      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,amount_usd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
-      if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
-      return json({ok:true,ticket:t});
-    }catch(e){
-      await ensureInit(env.DB);
-      const t=await env.DB.prepare('SELECT code,customer_name,contact_method,contact_value,scheduled_date,consultation_type,amount_iqd,amount_usd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
-      if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
-      return json({ok:true,ticket:t});
-    }
-  }
-
-  if(u.pathname==='/api/webhooks/wayl'&&req.method==='POST'){
-    await ensureInit(env.DB);
-    const raw=await req.text(),signature=req.headers.get('x-wayl-signature-256')||'';
-    const valid=await verifyWaylSignature(raw,signature,env.WAYL_WEBHOOK_SECRET||'');
-    if(!valid)return json({error:'Invalid Wayl signature'},401);
-    let event={};try{event=JSON.parse(raw)}catch{return json({error:'Invalid JSON'},400)}
-    const ref=String(event.referenceId||'');
-    if(!ref)return json({ok:true});
-    try{
-      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
-      if(ref.startsWith('CONS-')){
-        const code=ref.slice(5),out=await finalizeWaylConsultation(env,env.DB,code,current);
-        return json(out,out.ok?200:400);
-      }
-      const out=await finalizeWaylOrder(env,env.DB,ref,origin,current);
-      return json(out,out.ok?200:400);
-    }catch(e){return json({error:e.message||'Wayl webhook processing failed'},502)}
-  }
-
-  await ensureInit(env.DB);
-
-  if(u.pathname==='/api/payments/wayl/start'&&req.method==='POST'){
-    try{
-      if(!waylConfigured(env))return json({error:'Wayl is not configured yet'},503);
-      const b=await req.json(),orderId=String(b.order_id||'');
-      const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
-      if(!order)return json({error:'Order not found'},404);
-      if(order.payment_status==='paid')return json({ok:true,paid:true});
-      if(Number(order.total||0)<=0)return json({error:'Free orders do not use Wayl'},400);
-      if(order.wayl_link_id||order.wayl_code){
-        try{
-          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
-          const out=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
-          if(out.paid)return json({...out,order_id:orderId});
-          if(current?.url)return json({ok:true,paid:false,url:current.url,order_id:orderId,charge_iqd:Number(order.wayl_charge_iqd||0),env:waylEnv(env)});
-        }catch{}
-      }
-      const charge=await orderChargeIQD(env.DB,order);
-      const link=await createWaylLink(env,{
-        referenceId:orderId,total:charge,label:'WarshaTik '+orderId,
-        webhookUrl:origin+'/api/webhooks/wayl',
-        redirectionUrl:origin+'/checkout.html?wayl_order='+encodeURIComponent(orderId)
-      });
-      await env.DB.prepare('UPDATE orders SET payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=? WHERE id=?')
-        .bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),charge,orderId).run();
-      return json({ok:true,url:link.url,order_id:orderId,charge_iqd:charge,env:waylEnv(env)});
-    }catch(e){return json({error:e.message||'Unable to start Wayl payment'},502)}
-  }
-
-  if(u.pathname==='/api/payments/wayl/status'&&req.method==='GET'){
-    try{
-      const supplied=String(u.searchParams.get('order_id')||'').trim();
-      if(!supplied)return json({error:'Missing order_id'},400);
-      let order=await env.DB.prepare('SELECT * FROM orders WHERE id=? OR wayl_link_id=? OR wayl_code=? OR payment_reference=? LIMIT 1').bind(supplied,supplied,supplied,supplied).first();
-      if(!order){
-        try{
-          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(supplied))).data;
-          const ref=String(current?.referenceId||'');
-          if(ref)order=await env.DB.prepare('SELECT * FROM orders WHERE id=? LIMIT 1').bind(ref).first();
-        }catch{}
-      }
-      if(!order)return json({error:'Order not found'},404);
-      const orderId=order.id;
-      if(order.payment_status==='paid')return json({ok:true,paid:true,order_id:orderId});
-      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
-      const out=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
-      return json({...out,order_id:orderId,wayl_status:current?.status||null},out.ok?200:400);
-    }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
-  }
-
-  if(u.pathname==='/api/consultations/payment-status'&&req.method==='GET'){
-    try{
-      const code=String(u.searchParams.get('code')||'').replace(/\D/g,'');
-      if(code.length!==10)return json({error:'Invalid ticket code'},400);
-      const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
-      if(!t)return json({error:'Ticket not found'},404);
-      if(t.status==='paid'||t.status==='completed')return json({ok:true,paid:true,ticket:t});
-      const ref='CONS-'+code,current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
-      const out=await finalizeWaylConsultation(env,env.DB,code,current);
-      const updated=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
-      return json({...out,ticket:updated,wayl_status:current?.status||null},out.ok?200:400);
-    }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
-  }
-
-  if(u.pathname==='/api/admin/auth/request-code'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email),password=String(b.password||''),allowed=normEmail(env.ADMIN_EMAIL||''),expectedPassword=String(env.ADMIN_PASSWORD||'');
-    if(!allowed)return json({error:'ADMIN_EMAIL missing in Cloudflare Worker'},503);
-    if(!expectedPassword)return json({error:'ADMIN_PASSWORD missing in Cloudflare Worker'},503);
-    if(!validEmail(email)||!password)return json({error:'بيانات الدخول غير صحيحة.'},401);
-    const rateKey=await adminRateKey(req,email),state=await adminRateState(env.DB,rateKey),now=Date.now();
-    if(state.blocked_until>now)return json({error:'محاولات كثيرة. حاول مرة أخرى بعد 30 دقيقة.'},429);
-    const [emailOk,passwordOk]=await Promise.all([secureEqualText(email,allowed),secureEqualText(password,expectedPassword)]);
-    if(!emailOk||!passwordOk){
-      await adminRateFail(env.DB,rateKey,state);
-      return json({error:'بيانات الدخول غير صحيحة.'},401);
-    }
-    await adminRateClear(env.DB,rateKey);
-    const recent=await env.DB.prepare('SELECT created_at FROM admin_login_codes WHERE email=? ORDER BY created_at DESC LIMIT 1').bind(email).first();
-    if(recent&&now-Number(recent.created_at||0)<60000)return json({ok:true,message:'تم إرسال رمز مؤخراً. انتظر دقيقة قبل طلب رمز جديد.'});
-    const code=secureSixDigitCode(),hash=await hashText(code);
-    await env.DB.prepare('DELETE FROM admin_login_codes WHERE email=?').bind(email).run();
-    await env.DB.prepare('INSERT INTO admin_login_codes(id,email,code_hash,expires_at,created_at,attempts) VALUES(?,?,?,?,?,0)').bind(crypto.randomUUID(),email,hash,now+10*60*1000,now).run();
-    const mail=await sendEmail(env,email,'رمز دخول لوحة تحكم ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>رمز دخول لوحة التحكم</h2><p style="font-size:32px;font-weight:800;letter-spacing:5px">${code}</p><p>الرمز صالح لمدة 10 دقائق ويستخدم مرة واحدة فقط.</p><p>إذا لم تطلب تسجيل الدخول فتجاهل الرسالة.</p></div>`);
-    if(!mail.sent)return json({error:mail.reason||'Email failed'},502);
-    return json({ok:true,message:'تم قبول كلمة المرور وإرسال رمز التحقق إلى بريدك.'});
-  }
-
-  if(u.pathname==='/api/admin/auth/verify-code'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').replace(/\D/g,''),allowed=normEmail(env.ADMIN_EMAIL||''),now=Date.now();
-    if(!allowed||email!==allowed||code.length!==6)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
-    const rec=await env.DB.prepare('SELECT id,code_hash,attempts FROM admin_login_codes WHERE email=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,now).first();
-    if(!rec)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
-    const hash=await hashText(code),ok=await secureEqualText(hash,rec.code_hash);
-    if(!ok){
-      const attempts=Number(rec.attempts||0)+1;
-      if(attempts>=5){
-        await env.DB.prepare('DELETE FROM admin_login_codes WHERE id=?').bind(rec.id).run();
-        return json({error:'تم إلغاء الرمز بعد محاولات كثيرة. اطلب رمزاً جديداً.'},401);
-      }
-      await env.DB.prepare('UPDATE admin_login_codes SET attempts=? WHERE id=?').bind(attempts,rec.id).run();
-      return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
-    }
-    const token='wta_'+randomToken(32),tokenHash=await hashText(token),expires=now+12*60*60*1000;
-    await Promise.all([
-      env.DB.prepare('UPDATE admin_login_codes SET used_at=? WHERE id=?').bind(now,rec.id).run(),
-      env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at<=?').bind(now).run(),
-      env.DB.prepare('INSERT INTO admin_sessions(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(tokenHash,email,expires,now).run()
-    ]);
-    return json({ok:true,token,expires_at:expires,email});
   }
 
   if(u.pathname==='/api/admin/auth/session'&&req.method==='GET'){
@@ -516,19 +367,6 @@ export default{async fetch(req,env){
         .bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),amount,code).run();
       return json({ok:true,paid:false,url:link.url,code,amount_iqd:amount,env:waylEnv(env)});
     }catch(e){return json({error:e.message||'تعذر بدء الدفع عبر Wayl'},502)}
-  }
-
-  if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email);if(!validEmail(email))return json({ok:false,error:'Invalid email'},400);
-    const paid=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE email=? AND payment_status='paid'").bind(email).first();
-    if(Number(paid?.c||0)>0){
-      const code=String(Math.floor(100000+Math.random()*900000)),h=await hashText(code),now=Date.now();
-      await env.DB.prepare('DELETE FROM recovery_codes WHERE email=?').bind(email).run();
-      await env.DB.prepare('INSERT INTO recovery_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,h,now+15*60*1000,now).run();
-      const mail=await sendEmail(env,email,'رمز استرجاع مشتريات ورشة تك',`<div dir="rtl"><h2>رمز استرجاع مشترياتك</h2><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>الرمز صالح لمدة 15 دقيقة.</p></div>`);
-      if(!mail.sent)return json({ok:false,error:'Email delivery failed',reason:mail.reason||'Unknown email error'},503);
-    }
-    return json({ok:true,message:'إذا كان البريد مرتبطاً بمشتريات مدفوعة، أرسلنا رمز تحقق.'});
   }
 
   if(u.pathname.startsWith('/api/download/')&&req.method==='GET'){
