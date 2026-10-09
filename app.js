@@ -65,8 +65,16 @@ function syncSaleFields(){
   if(b)b.style.display=sale?'flex':'none';
 }
 
+function syncPackageFields(){
+  const wrap=$('#packageEditor');if(!wrap)return;
+  const enabled=$('#packageEnabled')?.checked;
+  const type=$('#itemSection')?.value||$('#editType')?.value;
+  wrap.hidden=!(enabled&&type==='product');
+}
+$('#packageEnabled')?.addEventListener('change',syncPackageFields);
+$('#itemSection')?.addEventListener('change',syncPackageFields);
 function refreshItemSectionOptions(selected){const sel=$('#itemSection');if(!sel)return;const secs=(window.wtStoreSections||[{id:'products',name:'المنتجات',type:'product'},{id:'courses',name:'الدورات',type:'course'}]).filter(s=>s.type!=='consultations');sel.innerHTML=secs.map(s=>`<option value="${s.type}">${s.name}</option>`).join('');if(selected&&[...sel.options].some(o=>o.value===selected))sel.value=selected}window.refreshItemSectionOptions=refreshItemSectionOptions;
-function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;refreshItemSectionOptions(item?.type||type);$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#keywords').value=(item?.keywords||[]).join(', ');$('#digitalOnly').checked=item?.digitalOnly??true;$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();syncSaleFields();updateNetPreview();$('#modal').classList.add('open')}
+function openEditor(type,item=null){editing=item?.id||(type+'-'+Date.now());currentImages=[...(item?.images||[])].map(x=>typeof x==='string'?{url:x,name:x}:x);currentFiles=[...(item?.files||[])];$('#modalTitle').textContent=item?'تعديل':'إضافة';$('#editType').value=type;refreshItemSectionOptions(item?.type||type);$('#title').value=item?.title||'';$('#category').value=item?.category||'';$('#price_iqd').value=item?.price_iqd||'';$('#price_usd').value=item?.price_usd||'';$('#old_iqd').value=item?.old_iqd??item?.old_price_iqd??'';$('#old_usd').value=item?.old_usd??item?.old_price_usd??'';$('#status').value=item?.status||'normal';$('#statusText').value=item?.statusText||STATUS_TEXT[$('#status').value];$('#statusText').readOnly=true;$('#editStatusText').textContent='✎';$('#short').value=item?.short||'';$('#description').value=item?.description||'';$('#features').value=(item?.features||[]).join('\n');$('#keywords').value=(item?.keywords||[]).join(', ');$('#digitalOnly').checked=item?.digitalOnly??true;$('#packageEnabled').checked=!!item?.packageEnabled;$('#software_price_iqd').value=item?.software_price_iqd??item?.price_iqd??'';$('#software_price_usd').value=item?.software_price_usd??item?.price_usd??'';$('#hardware_price_iqd').value=item?.hardware_price_iqd??item?.price_iqd??'';$('#hardware_price_usd').value=item?.hardware_price_usd??item?.price_usd??'';$('#softwareFeatures').value=(item?.softwareFeatures||item?.features||[]).join('\n');$('#hardwareFeatures').value=(item?.hardwareFeatures||[]).join('\n');syncPackageFields();$('#iraqOnly').checked=!!item?.iraqOnly;$('#youtube').value=item?.youtube||'';$('#active').checked=item?.active??true;renderImages();renderFiles();syncSaleFields();updateNetPreview();$('#modal').classList.add('open')}
 function editItem(type,id){openEditor(type,allItems.find(x=>x.id===id)||[...products,...courses].find(x=>x.id===id))}
 async function delItem(type,id){if(!confirm('حذف؟'))return;try{await apiCall('/items/'+encodeURIComponent(id),{method:'DELETE'});allItems=allItems.filter(x=>x.id!==id);products=allItems.filter(x=>x.type==='product');courses=allItems.filter(x=>x.type==='course');render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}));toast('تم الحذف من المتجر')}catch(e){alert(e.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':e.message)}}
 function close(){ $('#modal').classList.remove('open') }
@@ -99,6 +107,8 @@ function convertUsdToIqd(usd){return Math.round(Number(usd||0)*currentExchangeRa
 $('#price_iqd')?.addEventListener('input',updateNetPreview);
 $('#price_usd')?.addEventListener('input',()=>{const v=$('#price_usd').value;if(v!=='')$('#price_iqd').value=convertUsdToIqd(v);updateNetPreview()});
 $('#old_usd')?.addEventListener('input',()=>{const v=$('#old_usd').value;if(v!=='')$('#old_iqd').value=convertUsdToIqd(v)});
+$('#software_price_usd')?.addEventListener('input',()=>{const v=$('#software_price_usd').value;if(v!=='')$('#software_price_iqd').value=convertUsdToIqd(v)});
+$('#hardware_price_usd')?.addEventListener('input',()=>{const v=$('#hardware_price_usd').value;if(v!=='')$('#hardware_price_iqd').value=convertUsdToIqd(v)});
 $('#status').addEventListener('change',e=>{setStatusText(e.target.value,true);syncSaleFields();updateNetPreview()});
 $('#editStatusText').addEventListener('click',()=>{
   const input=$('#statusText');
@@ -167,7 +177,7 @@ $('#form').onsubmit=async e=>{
     short:$('#short').value,description:$('#description').value,
     features:$('#features').value.split('\n').map(x=>x.trim()).filter(Boolean),
     keywords:$('#keywords').value.split(/[,#\n]/).map(x=>x.trim()).filter(Boolean),
-    digitalOnly:$('#digitalOnly').checked,iraqOnly:$('#iraqOnly').checked,
+     digitalOnly:$('#digitalOnly').checked,packageEnabled:$('#packageEnabled').checked,software_price_iqd:$('#software_price_iqd').value?Number($('#software_price_iqd').value):null,software_price_usd:$('#software_price_usd').value?Number($('#software_price_usd').value):null,hardware_price_iqd:$('#hardware_price_iqd').value?Number($('#hardware_price_iqd').value):null,hardware_price_usd:$('#hardware_price_usd').value?Number($('#hardware_price_usd').value):null,softwareFeatures:$('#softwareFeatures').value.split('\n').map(x=>x.trim()).filter(Boolean),hardwareFeatures:$('#hardwareFeatures').value.split('\n').map(x=>x.trim()).filter(Boolean),iraqOnly:$('#iraqOnly').checked,
     youtube:$('#youtube').value,images:currentImages,files:currentFiles,active:$('#active').checked
   };
   try{
