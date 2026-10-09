@@ -63,19 +63,34 @@ async function handleWaylReturn(){
   const qs=new URLSearchParams(location.search);
   const queryOrder=String(qs.get('wayl_order')||'').trim();
   const savedOrder=String(localStorage.getItem('warsha-wayl-order')||'').trim();
-  const orderId=qs.has('new')?'':(queryOrder||savedOrder);
+  const lastOrder=String(sessionStorage.getItem('warsha-wayl-order')||'').trim();
+  const candidates=[queryOrder,savedOrder,lastOrder].filter((value,index,all)=>value&&all.indexOf(value)===index);
+  const orderId=qs.has('new')?'':candidates[0];
   if(!orderId)return false;
+  const checkCandidates=async()=>{
+    let lastError;
+    for(const id of candidates){
+      try{
+        const data=await apiJson('/api/payments/wayl/status?order_id='+encodeURIComponent(id),{cache:'no-store'});
+        return {data,id};
+      }catch(error){
+        lastError=error;
+        if(!/Order not found|الطلب غير موجود|HTTP 404/i.test(String(error.message||'')))throw error;
+      }
+    }
+    throw lastError||new Error('Order not found');
+  };
   const form=document.getElementById('checkoutForm'),summary=document.querySelector('.cart-summary'),result=document.getElementById('orderResult');
   if(form)form.style.display='none';if(summary)summary.style.display='none';
   result.innerHTML='<div class="order-ready"><h2>جاري التحقق من الدفع...</h2><p>يرجى الانتظار لحظة.</p></div>';
   const newOrder=()=>{
-    localStorage.removeItem('warsha-wayl-order');
+    localStorage.removeItem('warsha-wayl-order');sessionStorage.removeItem('warsha-wayl-order');
     location.replace('checkout.html?new=1');
   };
   try{
-    const d=await apiJson('/api/payments/wayl/status?order_id='+encodeURIComponent(orderId),{cache:'no-store'});
+    const {data:d,id:verifiedId}=await checkCandidates();
     if(d.paid){
-      clearCart();localStorage.removeItem('warsha-wayl-order');
+      clearCart();localStorage.removeItem('warsha-wayl-order');sessionStorage.removeItem('warsha-wayl-order');
       result.innerHTML='<div class="order-ready"><h2>تم الدفع بنجاح ✓</h2><p>رقم الطلب: <strong>'+String(d.order_id||orderId)+'</strong></p><div class="security-note">تم تأكيد الدفع وإرسال ملفاتك إلى البريد الإلكتروني.</div><a class="btn btn-primary" href="recover.html">استرجاع مشترياتي</a></div>';
     }else{
       const state=String(d.wayl_status||d.status||'قيد المعالجة');
@@ -87,11 +102,12 @@ async function handleWaylReturn(){
     }
   }catch(error){
     result.innerHTML='<div class="order-ready"><h2>تعذر التحقق من الدفع</h2><p id="waylCheckError"></p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" id="retryWaylCheck">إعادة التحقق</button><button class="btn btn-ghost" id="resumeWaylPayment">إكمال الدفع</button><button class="btn btn-ghost" id="startFreshOrder">بدء طلب جديد</button></div><p id="waylResumeError" role="alert" style="color:#b42336"></p></div>';
-    document.getElementById('waylCheckError').textContent=error.message||'تعذر الاتصال';
+    document.getElementById('waylCheckError').textContent=/Order not found/i.test(String(error.message||''))?'لم نتمكن من العثور على مرجع الطلب بعد العودة من Wayl. إذا وصلك تأكيد الدفع والبريد، لا تدفع مرة أخرى؛ استخدم صفحة استرجاع المشتريات.':(error.message||'تعذر الاتصال');
+    result.insertAdjacentHTML('beforeend','<p><a class="btn btn-ghost" href="recover.html">استرجاع مشتريات مدفوعة</a></p>');
     document.getElementById('retryWaylCheck').onclick=()=>location.reload();
     document.getElementById('resumeWaylPayment').onclick=e=>resumeWaylPayment(orderId,e.currentTarget);
     document.getElementById('startFreshOrder').onclick=newOrder;
   }
   return true;
 }
-document.addEventListener('DOMContentLoaded',async()=>{if(await handleWaylReturn())return;loadCheckout();document.getElementById('checkoutForm').onsubmit=async e=>{e.preventDefault();const name=document.getElementById('checkoutName').value.trim(),email=document.getElementById('checkoutEmail').value.trim(),status=document.getElementById('checkoutStatus'),btn=document.getElementById('prepareOrderBtn');if(!name||!email)return;btn.disabled=true;status.textContent='جاري تجهيز الطلب...';try{const d=await apiJson('/api/orders/create',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,email,currency:currency(),items:checkoutItems.map(x=>x.cartEntry)})});status.textContent='';if(d.free){clearCart();const links=(d.downloads||[]).map(x=>`<a class="btn btn-ghost free-download-link" href="${x.url}">تحميل ${x.name}</a>`).join('');document.getElementById('orderResult').innerHTML=`<div class="order-ready"><h2>تم إكمال الطلب المجاني ✓</h2><p>رقم الطلب: <strong>${d.order_id}</strong></p><p>تم تسجيل المنتج باسم بريدك الإلكتروني.</p><div class="security-note">${d.email_sent?'✅ تم إرسال رسالة التحميل إلى بريدك الإلكتروني.':'⚠️ لم نتمكن من إرسال البريد الآن'+(d.email_reason?' — '+d.email_reason:'')+'. استخدم روابط التحميل أدناه، ويمكنك دائماً استرجاع المنتج لاحقاً بالبريد.'}</div>${links?`<div class="free-downloads"><strong>روابط التحميل:</strong>${links}</div>`:''}</div>`;btn.disabled=true;btn.textContent='تم الإكمال ✓'}else{status.textContent='جاري فتح صفحة الدفع الآمنة...';const pd=await apiJson('/api/payments/wayl/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({order_id:d.order_id})});if(pd.paid){location.assign('checkout.html?wayl_order='+encodeURIComponent(d.order_id));return}if(!pd.url)throw new Error('لم يتم استلام رابط الدفع من Wayl');const payUrl=new URL(String(pd.url),location.href);localStorage.setItem('warsha-wayl-order',d.order_id);location.assign(payUrl.href)}}catch(err){status.textContent='❌ '+err.message;btn.disabled=false}}});</script></body></html>
+document.addEventListener('DOMContentLoaded',async()=>{if(await handleWaylReturn())return;loadCheckout();document.getElementById('checkoutForm').onsubmit=async e=>{e.preventDefault();const name=document.getElementById('checkoutName').value.trim(),email=document.getElementById('checkoutEmail').value.trim(),status=document.getElementById('checkoutStatus'),btn=document.getElementById('prepareOrderBtn');if(!name||!email)return;btn.disabled=true;status.textContent='جاري تجهيز الطلب...';try{const d=await apiJson('/api/orders/create',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,email,currency:currency(),items:checkoutItems.map(x=>x.cartEntry)})});status.textContent='';if(d.free){clearCart();const links=(d.downloads||[]).map(x=>`<a class="btn btn-ghost free-download-link" href="${x.url}">تحميل ${x.name}</a>`).join('');document.getElementById('orderResult').innerHTML=`<div class="order-ready"><h2>تم إكمال الطلب المجاني ✓</h2><p>رقم الطلب: <strong>${d.order_id}</strong></p><p>تم تسجيل المنتج باسم بريدك الإلكتروني.</p><div class="security-note">${d.email_sent?'✅ تم إرسال رسالة التحميل إلى بريدك الإلكتروني.':'⚠️ لم نتمكن من إرسال البريد الآن'+(d.email_reason?' — '+d.email_reason:'')+'. استخدم روابط التحميل أدناه، ويمكنك دائماً استرجاع المنتج لاحقاً بالبريد.'}</div>${links?`<div class="free-downloads"><strong>روابط التحميل:</strong>${links}</div>`:''}</div>`;btn.disabled=true;btn.textContent='تم الإكمال ✓'}else{status.textContent='جاري فتح صفحة الدفع الآمنة...';const pd=await apiJson('/api/payments/wayl/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({order_id:d.order_id})});if(pd.paid){location.assign('checkout.html?wayl_order='+encodeURIComponent(d.order_id));return}if(!pd.url)throw new Error('لم يتم استلام رابط الدفع من Wayl');const payUrl=new URL(String(pd.url),location.href);localStorage.setItem('warsha-wayl-order',d.order_id);sessionStorage.setItem('warsha-wayl-order',d.order_id);location.assign(payUrl.href)}}catch(err){status.textContent='❌ '+err.message;btn.disabled=false}}});</script></body></html>
