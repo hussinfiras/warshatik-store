@@ -38,11 +38,16 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const files=(item.files||[]).filter(f=>f&&(typeof f==='string'||f.key||f.url));
     let activePackage=item.packageEnabled?'software':null;
     const packageFeatures=()=>activePackage==='software'?(item.softwareFeatures||item.features||[]):activePackage==='hardware'?(item.hardwareFeatures||item.features||[]):item.features||[];
-    const packagePrice=(old=false)=>{if(!item.packageEnabled||old)return moneyLocal(item,old);const cur=window.currency?window.currency():'IQD',usd=cur==='USD';const n=activePackage==='hardware'?(usd?item.hardware_price_usd:item.hardware_price_iqd):(usd?item.software_price_usd:item.software_price_iqd);const fallback=usd?item.price_usd:item.price_iqd;const v=n??fallback;return usd?'
+    const packageMoney=()=>{
+      if(!item.packageEnabled)return moneyLocal(item);
+      const usd=(window.currency?window.currency():'IQD')==='USD';
+      const n=activePackage==='hardware'?(usd?item.hardware_price_usd:item.hardware_price_iqd):(usd?item.software_price_usd:item.software_price_iqd);
+      const fallback=usd?item.price_usd:item.price_iqd,v=n??fallback;
+      return usd?'
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
 
-    const regionalPriceHtml=()=>item.status==='coming'?'':(item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':`<strong>${packagePrice()}</strong>`);
+    const regionalPriceHtml=()=>item.status==='coming'?'':(item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':'<strong>'+packageMoney()+'</strong>');
     const regionalOldHtml=()=>item.status==='sale'&&((window.currency?window.currency():'IQD')==='USD'?item.old_price_usd:item.old_price_iqd)?`<small class="old-price">${moneyLocal(item,true)}</small>`:'';
     root.innerHTML=`<div class="reveal">
       <div class="gallery-main" id="mainGallery">
@@ -83,8 +88,8 @@ ${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'de
     const btn=document.getElementById('addCartBtn');
     const updatePackageView=()=>{
       const priceBox=root.querySelector('.detail-price');if(priceBox&&item.status!=='coming')priceBox.innerHTML=regionalOldHtml()+regionalPriceHtml();
-      const featureBox=document.getElementById('packageFeatureList');if(featureBox)featureBox.innerHTML=packageFeatures().map(x=>'<li>'+x+'</li>').join('');
-      const warn=document.getElementById('packageDigitalWarning');if(warn)warn.innerHTML=((!item.packageEnabled&&item.digitalOnly!==false)||activePackage==='software')?'<div class="digital-warning"><strong>تنبيه</strong><span>'+(storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.')+'</span></div>':'';
+      const features=document.getElementById('packageFeatureList');if(features)features.innerHTML=packageFeatures().map(x=>'<li>'+x+'</li>').join('');
+      const warning=document.getElementById('packageDigitalWarning');if(warning)warning.innerHTML=((!item.packageEnabled&&item.digitalOnly!==false)||activePackage==='software')?'<div class="digital-warning"><strong>تنبيه</strong><span>'+(storefront.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.')+'</span></div>':'';
       const note=document.getElementById('packageDownloadNote');if(note)note.innerHTML=activePackage==='hardware'?'':(files.length?'<div class="download-note">يتضمن هذا المنتج '+files.length+' ملف/ملفات رقمية. '+(item.status==='free'?'أدخل بريدك لإكمال الطلب واستلام الملفات مباشرة.':'تصبح روابط التحميل متاحة بعد إكمال الدفع.')+'</div>':(missingDigitalFile()?'<div class="digital-warning"><strong>غير متاح حالياً</strong><span>لم تتم إضافة ملف التحميل لهذا المنتج بعد.</span></div>':''));
       if(btn){const off=isDisabled();btn.disabled=off;btn.style.opacity=off?'.45':'1';btn.style.cursor=off?'not-allowed':'pointer';btn.textContent=blockedByRegion?'متاح داخل العراق فقط':(missingDigitalFile()?'غير متاح حالياً':(off?(item.status==='sold'?'غير متوفر حالياً':'قريباً'):(item.status==='free'?'احصل عليه مجاناً':'أضف للسلة')))}
     };
@@ -112,7 +117,8 @@ ${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'de
     console.error(err);
     root.innerHTML='<div class="empty-card"><h1>تعذر تحميل المنتج</h1><p>حدث خطأ أثناء تحميل البيانات. حاول تحديث الصفحة.</p></div>';
   }
-});+Number(v||0).toFixed(Number(v||0)%1?2:0):Number(v||0).toLocaleString('en-US')+' د.ع'};
+});+Number(v||0).toFixed(Number(v||0)%1?2:0):Number(v||0).toLocaleString('en-US')+' د.ع';
+    };
     const missingDigitalFile=()=>((!item.packageEnabled&&item.digitalOnly!==false)||activePackage==='software')&&item.status!=='free'&&!['sold','coming'].includes(item.status)&&files.length===0;
     const isDisabled=()=>['sold','coming'].includes(item.status)||blockedByRegion||missingDigitalFile();
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
