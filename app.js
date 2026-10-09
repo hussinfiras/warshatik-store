@@ -84,6 +84,7 @@ function syncPackageFields(){
   const enabled=$('#packageEnabled')?.checked;
   const type=$('#itemSection')?.value||$('#editType')?.value;
   wrap.hidden=!(enabled&&type==='product');
+  if(!(enabled&&type==='product')&&$('#iraqOnly'))$('#iraqOnly').checked=false;
 }
 $('#packageEnabled')?.addEventListener('change',syncPackageFields);
 $('#itemSection')?.addEventListener('change',syncPackageFields);
