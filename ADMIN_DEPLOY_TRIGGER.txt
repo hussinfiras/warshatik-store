@@ -1,1 +1,1 @@
-Trigger admin deployment for resilient API fallback and settings save fix.
+Trigger admin deployment for login code timeout fix.
