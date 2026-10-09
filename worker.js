@@ -54,6 +54,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_link_id TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_code TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_charge_iqd INTEGER`)}catch{}
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_url TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_sent INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_last_error TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
@@ -407,6 +408,7 @@ export default{async fetch(req,env,ctx){
       if(order.payment_status==='paid')return json({ok:true,paid:true,order_id:orderId});
       if(Number(order.total||0)<=0)return json({error:'Free orders do not use Wayl'},400);
       const charge=await orderChargeIQD(env.DB,order);
+      if(order.wayl_url&&/^https:\/\//.test(order.wayl_url))return json({ok:true,paid:false,url:order.wayl_url,order_id:orderId,charge_iqd:charge});
       if(order.wayl_link_id||order.wayl_code){
         let current;
         try{current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data}
@@ -421,7 +423,7 @@ export default{async fetch(req,env,ctx){
         return json({ok:true,paid:false,url:current.url,order_id:orderId,charge_iqd:charge});
       }
       const link=await createWaylLink(env,{referenceId:orderId,total:charge,label:'WarshaTik '+orderId,webhookUrl:origin+'/api/webhooks/wayl',redirectionUrl:origin+'/checkout.html?wayl_order='+encodeURIComponent(orderId)});
-      await env.DB.prepare('UPDATE orders SET payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=? WHERE id=?').bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),charge,orderId).run();
+      await env.DB.prepare('UPDATE orders SET payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=?,wayl_url=? WHERE id=?').bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),charge,String(link.url||''),orderId).run();
       return json({ok:true,paid:false,url:link.url,order_id:orderId,charge_iqd:charge});
     }catch(e){return json({error:e.message||'Unable to start Wayl payment'},502)}
   }
@@ -438,7 +440,9 @@ export default{async fetch(req,env,ctx){
         if(!Number(order.delivery_email_sent||0))await sendPurchaseEmail(env,env.DB,order.id,origin);
         return json({ok:true,paid:true,order_id:order.id});
       }
-      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(order.id))).data;
+      let current;
+      try{current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(order.id))).data}
+      catch(e){return json({ok:true,paid:false,order_id:order.id,wayl_status:'Pending verification',url:order.wayl_url||null,verification_delayed:true})}
       const out=await finalizeWaylOrder(env,env.DB,order.id,origin,current);
       return json({...out,order_id:order.id,wayl_status:current?.status||null},out.ok?200:400);
     }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
