@@ -627,3 +627,10 @@ body[data-page="home"] .fallback-hero.with-news p{
   transform:none!important;
   visibility:visible!important;
 }
+
+.package-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.package-option{border:1px solid #ddd3e8;background:#fff;color:#31283a;border-radius:14px;padding:13px 16px;font:800 15px Cairo,sans-serif;cursor:pointer;transition:.2s}
+.package-option:hover{border-color:#bca2d8}
+.package-option.active{background:#8055c2;color:#fff;border-color:#8055c2;box-shadow:0 8px 20px rgba(128,85,194,.18)}
+.package-chip{display:inline-flex;align-items:center;width:max-content;padding:4px 9px;border-radius:999px;background:#f0e7fb;color:#8055c2;font-size:12px;font-weight:800;margin:2px 0 6px}
+@media(max-width:600px){.package-choice{grid-template-columns:1fr 1fr}.package-option{padding:11px 8px;font-size:14px}}
