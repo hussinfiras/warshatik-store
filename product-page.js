@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const disabled=['sold','coming'].includes(item.status)||blockedByRegion||missingDigitalFile;
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
+    const missingDigitalFile=item.digitalOnly!==false&&!['free','coming','sold'].includes(item.status)&&!(item.files||[]).some(f=>f&&f.key);
 
     const regionalPriceHtml=()=>item.status==='coming'?'':(item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':`<strong>${moneyLocal(item)}</strong>`);
     const regionalOldHtml=()=>item.status==='sale'&&((window.currency?window.currency():'IQD')==='USD'?item.old_price_usd:item.old_price_iqd)?`<small class="old-price">${moneyLocal(item,true)}</small>`:'';
