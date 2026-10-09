@@ -21,12 +21,15 @@ async function init(db){
   try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN amount_usd REAL NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN wayl_link_id TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN wayl_code TEXT`)}catch{}
+  try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN wayl_charge_iqd INTEGER`)}catch{}
   try{await db.exec(`UPDATE consultation_tickets SET amount_usd=CASE WHEN consultation_type='supervision' THEN 75 ELSE 15 END WHERE amount_usd=0`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   try{await db.exec(`ALTER TABLE orders ADD COLUMN customer_name TEXT NOT NULL DEFAULT ''`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_link_id TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_code TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_charge_iqd INTEGER`)}catch{}
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_sent INTEGER NOT NULL DEFAULT 0`)}catch{}
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_last_error TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
@@ -197,7 +200,7 @@ async function finalizeWaylOrder(env,db,orderId,origin,waylData){
   const actual=Math.round(Number(waylData?.total||0));
   if(actual!==expected)return {ok:false,error:'Wayl amount mismatch'};
   if(!waylPaidStatus(waylData))return {ok:true,paid:false,status:waylData?.status||'Unknown'};
-  if(order.payment_status==='paid')return {ok:true,paid:true,already_paid:true};
+  if(order.payment_status==='paid'){const mail=Number(order.delivery_email_sent||0)?{sent:true}:await sendPurchaseEmail(env,db,orderId,origin);return {ok:true,paid:true,already_paid:true,email_sent:!!mail.sent,email_reason:mail.reason||null};}
   const write=await db.prepare("UPDATE orders SET payment_status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP,wayl_link_id=COALESCE(wayl_link_id,?),wayl_code=COALESCE(wayl_code,?),wayl_charge_iqd=? WHERE id=? AND payment_status<>'paid'")
     .bind(String(waylData.id||waylData.code||'WAYL'),String(waylData.id||''),String(waylData.code||''),actual,orderId).run();
   if(!Number(write?.meta?.changes||0))return {ok:true,paid:true,already_paid:true};
@@ -207,7 +210,7 @@ async function finalizeWaylOrder(env,db,orderId,origin,waylData){
 async function finalizeWaylConsultation(env,db,code,waylData){
   const t=await db.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
   if(!t)return {ok:false,error:'Ticket not found'};
-  const expected=Math.round(Number(t.amount_iqd||0)),actual=Math.round(Number(waylData?.total||0));
+  const expected=Math.round(Number(t.wayl_charge_iqd||t.amount_iqd||0)),actual=Math.round(Number(waylData?.total||0));
   if(actual!==expected)return {ok:false,error:'Wayl amount mismatch'};
   if(!waylPaidStatus(waylData))return {ok:true,paid:false,status:waylData?.status||'Unknown'};
   if(t.status==='paid'||t.status==='completed')return {ok:true,paid:true,already_paid:true};
@@ -220,7 +223,10 @@ async function sendPurchaseEmail(env,db,orderId,origin){
   const {results}=await db.prepare('SELECT * FROM order_items WHERE order_id=?').bind(orderId).all();let blocks='';
   for(const it of results){const links=await makeDownloadLinks(env,db,orderId,it.item_id,origin);blocks+=`<h3>${it.title}</h3>${links.length?links.map(l=>`<p><a href="${l.url}">تحميل ${l.name}</a> <small>(الرابط صالح لمدة ساعة)</small></p>`).join(''):'<p>سيتم توفير الملف قريباً.</p>'}`;}
   const recover=`${origin}/recover.html`;
-  const free=Number(order.total||0)===0;return sendEmail(env,order.email,free?'تحميل منتجك المجاني - ورشة تك':'مشترياتك من ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>${free?'منتجك المجاني جاهز للتحميل':'شكراً لشرائك من ورشة تك'}</h2><p>رقم الطلب: <b>${order.id}</b></p>${blocks}<hr><p>حقك في المنتجات لا ينتهي. إذا انتهى رابط التحميل، استخدم صفحة استرجاع المشتريات لإصدار روابط جديدة:</p><p><a href="${recover}">استرجاع مشترياتي</a></p></div>`);
+  const free=Number(order.total||0)===0;
+  const mail=await sendEmail(env,order.email,free?'تحميل منتجك المجاني - ورشة تك':'مشترياتك من ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>${free?'منتجك المجاني جاهز للتحميل':'شكراً لشرائك من ورشة تك'}</h2><p>رقم الطلب: <b>${order.id}</b></p>${blocks}<hr><p>حقك في المنتجات لا ينتهي. إذا انتهى رابط التحميل، استخدم صفحة استرجاع المشتريات لإصدار روابط جديدة:</p><p><a href="${recover}">استرجاع مشترياتي</a></p></div>`);
+  try{await db.prepare('UPDATE orders SET delivery_email_sent=?,delivery_email_last_error=? WHERE id=?').bind(mail.sent?1:0,mail.sent?null:String(mail.reason||'Email failed').slice(0,500),orderId).run()}catch{}
+  return mail;
 }
 export default{async fetch(req,env){
   const u=new URL(req.url),origin=u.origin;
@@ -448,16 +454,17 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/orders/create'&&req.method==='POST'){
-    const b=await req.json(),name=String(b.name||'').trim(),email=normEmail(b.email),currency=String(b.currency||'IQD').toUpperCase();if(name.length<2)return json({error:'Name is required'},400);if(!validEmail(email))return json({error:'Invalid email'},400);
+    const b=await req.json(),name=String(b.name||'').trim(),email=normEmail(b.email),currency=(req.cf?.country==='IQ'?'IQD':'USD');if(name.length<2)return json({error:'Name is required'},400);if(!validEmail(email))return json({error:'Invalid email'},400);
     const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
     const vis=await getSettings(env.DB),sections=Array.isArray(vis.sections)?vis.sections:[];let total=0,selected=[];
     for(const id of ids){
-      const it=await env.DB.prepare('SELECT id,type,title,price_iqd,price_usd,status,active,iraq_only FROM items WHERE id=?').bind(id).first();
+      const it=await env.DB.prepare('SELECT id,type,title,price_iqd,price_usd,status,active,iraq_only,digital_only,files FROM items WHERE id=?').bind(id).first();
       if(!it||!it.active||['sold','coming'].includes(it.status))continue;
       if(it.type==='course'&&vis.show_courses===false)continue;
       if(it.type==='product'&&vis.show_products===false)continue;
       const custom=sections.find(s=>s&&s.type===it.type);if(custom&&custom.visible===false)continue;if(String(it.type||'').startsWith('section:')&&!custom)continue;
       if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);
+      if(it.digital_only&&safeParse(it.files).filter(f=>f?.key).length===0)return json({error:'هذا المنتج الرقمي غير جاهز للشراء حالياً لعدم توفر ملف التحميل.'},409);
       const price=it.status==='free'?0:(currency==='USD'?Number(it.price_usd):Number(it.price_iqd));
       total+=price;selected.push({...it,price});
     }
@@ -482,7 +489,7 @@ export default{async fetch(req,env){
       if(t.status==='paid'||t.status==='completed')return json({ok:true,paid:true,ticket:t});
       if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
       if(t.status==='ended')return json({error:'انتهت الجلسة، حاول مرة أخرى.'},400);
-      const ref='CONS-'+code,amount=Math.round(Number(t.amount_iqd||0));
+      const ref='CONS-'+code,s=await getSettings(env.DB),rate=Number(s.exchange_rate_iqd_per_usd||1500),regionalAmount=req.cf?.country==='IQ'?Number(t.amount_iqd||0):Number(t.amount_usd||0)*rate,amount=Math.round(Number(t.wayl_charge_iqd||regionalAmount||0));
       if(t.wayl_link_id||t.wayl_code){
         try{
           const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
@@ -496,8 +503,8 @@ export default{async fetch(req,env){
         webhookUrl:origin+'/api/webhooks/wayl',
         redirectionUrl:origin+'/consultations.html?wayl_consult='+encodeURIComponent(code)
       });
-      await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending',payment_reference=?,wayl_link_id=?,wayl_code=? WHERE code=?")
-        .bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),code).run();
+      await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending',payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=? WHERE code=?")
+        .bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),amount,code).run();
       return json({ok:true,paid:false,url:link.url,code,amount_iqd:amount,env:waylEnv(env)});
     }catch(e){return json({error:e.message||'تعذر بدء الدفع عبر Wayl'},502)}
   }
