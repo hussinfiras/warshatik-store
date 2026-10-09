@@ -10,6 +10,24 @@ const SEED=[
 ['protocols-course','course','UART • I²C • SPI ببساطة','Electronics',22000,17,null,null,'new','جديد','فهم بروتوكولات الاتصال من خلال أمثلة عملية.','دورة مختصرة توضح الفرق بين UART وI²C وSPI.',['شرح البتات','أمثلة عملية','مقارنة البروتوكولات'],[],[],'https://www.youtube.com/',1,70],
 ['esp32-wireless','course','ESP32: Wi-Fi و Bluetooth','ESP32',35000,27,null,null,'coming','قريباً','مشاريع لاسلكية ولوحات ويب باستخدام ESP32.','دورة عملية للبدء مع Wi-Fi وBluetooth على ESP32.',['Wi-Fi','BLE','Web Control'],[],[],'',1,80]
 ];
+async function ensureItemPackageSchema(db){
+  const migrations=[
+    "ALTER TABLE items ADD COLUMN package_enabled INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE items ADD COLUMN software_price_iqd REAL",
+    "ALTER TABLE items ADD COLUMN software_price_usd REAL",
+    "ALTER TABLE items ADD COLUMN hardware_price_iqd REAL",
+    "ALTER TABLE items ADD COLUMN hardware_price_usd REAL",
+    "ALTER TABLE items ADD COLUMN software_features TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE items ADD COLUMN hardware_features TEXT NOT NULL DEFAULT '[]'"
+  ];
+  for(const sql of migrations){
+    try{await db.exec(sql)}
+    catch(e){
+      const msg=String(e?.message||e).toLowerCase();
+      if(!msg.includes('duplicate column')&&!msg.includes('already exists'))throw e;
+    }
+  }
+}
 async function init(db){
   await db.exec(`CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,type TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL,price_iqd REAL NOT NULL,price_usd REAL NOT NULL,old_price_iqd REAL,old_price_usd REAL,status TEXT NOT NULL,status_text TEXT NOT NULL,short TEXT,description TEXT,features TEXT NOT NULL DEFAULT '[]',images TEXT NOT NULL DEFAULT '[]',youtube TEXT,active INTEGER NOT NULL DEFAULT 1,sort_order INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
   try{await db.exec(`ALTER TABLE items ADD COLUMN files TEXT NOT NULL DEFAULT '[]'`)}catch{}
@@ -17,6 +35,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE items ADD COLUMN digital_only INTEGER NOT NULL DEFAULT 1`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN iraq_only INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'`)}catch{}
+  await ensureItemPackageSchema(db);
   try{await db.exec(`ALTER TABLE items ADD COLUMN package_enabled INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN software_price_iqd REAL`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN software_price_usd REAL`)}catch{}
@@ -308,6 +327,16 @@ async function sendPurchaseEmail(env,db,orderId,origin){
   try{await db.prepare('UPDATE orders SET delivery_email_sent=?,delivery_email_last_error=? WHERE id=?').bind(mail.sent?1:0,mail.sent?null:String(mail.reason||'Email failed').slice(0,500),orderId).run()}catch{}
   return mail;
 }
+async function upsertItem(db,x){
+  await ensureItemPackageSchema(db);
+  const st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';
+  await db.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,package_enabled,software_price_iqd,software_price_usd,hardware_price_iqd,hardware_price_usd,software_features,hardware_features,active,sort_order,updated_at)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+  ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,package_enabled=excluded.package_enabled,software_price_iqd=excluded.software_price_iqd,software_price_usd=excluded.software_price_usd,hardware_price_iqd=excluded.hardware_price_iqd,hardware_price_usd=excluded.hardware_price_usd,software_features=excluded.software_features,hardware_features=excluded.hardware_features,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`)
+  .bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.packageEnabled?1:0,x.software_price_iqd??null,x.software_price_usd??null,x.hardware_price_iqd??null,x.hardware_price_usd??null,JSON.stringify(x.softwareFeatures||[]),JSON.stringify(x.hardwareFeatures||[]),x.active===false?0:1,x.sort_order||0).run();
+  const saved=await db.prepare('SELECT * FROM items WHERE id=?').bind(x.id).first();
+  return row(saved);
+}
 export default{async fetch(req,env,ctx){
   const u=new URL(req.url),origin=u.origin;
   if(req.method==='OPTIONS')return json({ok:true});
@@ -456,7 +485,9 @@ export default{async fetch(req,env,ctx){
       const hit=await cache.match(cacheKey);
       if(hit)return hit;
     }
-    const {results}=await env.DB.prepare('SELECT * FROM items ORDER BY sort_order,id').all();
+    try{await ensureItemPackageSchema(env.DB)}catch(e){return json({error:'Catalog schema error: '+String(e?.message||e)},500)}
+    let results=[];
+    try{({results}=await env.DB.prepare('SELECT * FROM items ORDER BY sort_order,id').all())}catch(e){return json({error:'Catalog database error: '+String(e?.message||e)},500)}
     const response=json({products:results.filter(x=>x.type==='product').map(row),courses:results.filter(x=>x.type==='course').map(row),items:results.map(row)},200,adminRequest?{'cache-control':'no-store'}:{'cache-control':'public, max-age=15, s-maxage=30, stale-while-revalidate=60'});
     if(cache&&!adminRequest&&!fresh)await cache.put(cacheKey,response.clone());
     return response;
@@ -540,6 +571,13 @@ export default{async fetch(req,env,ctx){
       const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
       await putSettings(env.DB,clean);await clearStoreCaches(origin);
       return json({ok:true,settings:await getSettings(env.DB)});
+    }
+    if(b.action==='save-item'){
+      try{
+        const saved=await upsertItem(env.DB,b.payload||{});
+        await clearStoreCaches(origin);
+        return json({ok:true,item:saved});
+      }catch(e){return json({error:'Item save failed: '+String(e?.message||e)},500)}
     }
     if(b.action==='health'){
       let db_ok=false,r2_ok=!!env.MEDIA;
@@ -660,12 +698,11 @@ export default{async fetch(req,env,ctx){
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';
-    await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,package_enabled,software_price_iqd,software_price_usd,hardware_price_iqd,hardware_price_usd,software_features,hardware_features,active,sort_order,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,package_enabled=excluded.package_enabled,software_price_iqd=excluded.software_price_iqd,software_price_usd=excluded.software_price_usd,hardware_price_iqd=excluded.hardware_price_iqd,hardware_price_usd=excluded.hardware_price_usd,software_features=excluded.software_features,hardware_features=excluded.hardware_features,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`)
-    .bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.packageEnabled?1:0,x.software_price_iqd??null,x.software_price_usd??null,x.hardware_price_iqd??null,x.hardware_price_usd??null,JSON.stringify(x.softwareFeatures||[]),JSON.stringify(x.hardwareFeatures||[]),x.active===false?0:1,x.sort_order||0).run();
-    await clearStoreCaches(origin);const saved=await env.DB.prepare('SELECT * FROM items WHERE id=?').bind(x.id).first();return json({ok:true,item:row(saved)});
+    try{
+      const x=await req.json(),saved=await upsertItem(env.DB,x);
+      await clearStoreCaches(origin);
+      return json({ok:true,item:saved});
+    }catch(e){return json({error:'Item save failed: '+String(e?.message||e)},500)}
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
