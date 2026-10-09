@@ -2,7 +2,7 @@
 const API='https://warshatik-store2.hussainfiras23.workers.dev/api';
 const $=s=>document.querySelector(s);
 const login=$('#adminLogin'),emailStep=$('#adminLoginEmailStep'),codeStep=$('#adminLoginCodeStep');
-const emailInput=$('#adminLoginEmail'),codeInput=$('#adminLoginCode'),status=$('#adminLoginStatus');
+const emailInput=$('#adminLoginEmail'),passwordInput=$('#adminLoginPassword'),codeInput=$('#adminLoginCode'),status=$('#adminLoginStatus');
 const sendBtn=$('#adminSendCode'),verifyBtn=$('#adminVerifyCode');
 const lastEmail=localStorage.getItem('wt_admin_email')||'';
 if(emailInput&&lastEmail)emailInput.value=lastEmail;
@@ -62,14 +62,14 @@ async function startAdmin(){
   if(login)login.hidden=true;
   document.body.classList.remove('admin-auth-pending');
   const scripts=[
-    'app.js?v=20261009g',
-    'domain-migrate.js?v=20261009g',
-    'store-tools.js?v=20261009g',
-    'section-manager.js?v=20261009g',
-    'consultation-admin.js?v=20261009g',
-    'admin-ui-guard.js?v=20261009g',
-    'customer-admin.js?v=20261009g',
-    'test-order.js?v=20261009g'
+    'app.js?v=20261009h',
+    'domain-migrate.js?v=20261009h',
+    'store-tools.js?v=20261009h',
+    'section-manager.js?v=20261009h',
+    'consultation-admin.js?v=20261009h',
+    'admin-ui-guard.js?v=20261009h',
+    'customer-admin.js?v=20261009h',
+    'test-order.js?v=20261009h'
   ];
   try{
     for(const src of scripts)await loadScript(src);
@@ -83,12 +83,13 @@ async function startAdmin(){
   }
 }
 sendBtn?.addEventListener('click',async()=>{
-  const email=String(emailInput?.value||'').trim().toLowerCase();
-  if(!email){setStatus('اكتب البريد الإلكتروني أولاً.');return}
-  sendBtn.disabled=true;setStatus('جاري إرسال رمز التحقق...');
+  const email=String(emailInput?.value||'').trim().toLowerCase(),password=String(passwordInput?.value||'');
+  if(!email||!password){setStatus('اكتب البريد الإلكتروني وكلمة المرور أولاً.');return}
+  sendBtn.disabled=true;setStatus('جاري التحقق وإرسال الرمز...');
   try{
-    const d=await call('/admin/auth/request-code',{method:'POST',body:JSON.stringify({email})});
+    const d=await call('/admin/auth/request-code',{method:'POST',body:JSON.stringify({email,password})});
     localStorage.setItem('wt_admin_email',email);
+    if(passwordInput)passwordInput.value='';
     setStatus(d.message||'تم إرسال الرمز.',true);
     showCode();
   }catch(e){setStatus('❌ '+e.message)}
@@ -110,7 +111,8 @@ verifyBtn?.addEventListener('click',async()=>{
 $('#adminChangeEmail')?.addEventListener('click',showEmail);
 codeInput?.addEventListener('input',()=>{codeInput.value=codeInput.value.replace(/\D/g,'').slice(0,6)});
 codeInput?.addEventListener('keydown',e=>{if(e.key==='Enter')verifyBtn?.click()});
-emailInput?.addEventListener('keydown',e=>{if(e.key==='Enter')sendBtn?.click()});
+emailInput?.addEventListener('keydown',e=>{if(e.key==='Enter')passwordInput?.focus()});
+passwordInput?.addEventListener('keydown',e=>{if(e.key==='Enter')sendBtn?.click()});
 
 (async()=>{
   showLogin();
