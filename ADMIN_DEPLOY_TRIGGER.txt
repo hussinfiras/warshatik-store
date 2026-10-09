@@ -1,1 +1,1 @@
-Trigger admin deployment for faster two-step login verification.
+Trigger admin deployment for software/hardware package editor controls.
