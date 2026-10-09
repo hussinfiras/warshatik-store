@@ -1,1 +1,1 @@
-Trigger deployment for hardware-only Iraq restriction, package price colors, cart badge/message fixes, and resilient Wayl checkout API handling.
+Trigger deployment for checkout fetch error handling and Wayl payment route initialization.
