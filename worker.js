@@ -408,12 +408,17 @@ export default{async fetch(req,env,ctx){
       if(Number(order.total||0)<=0)return json({error:'Free orders do not use Wayl'},400);
       const charge=await orderChargeIQD(env.DB,order);
       if(order.wayl_link_id||order.wayl_code){
-        try{
-          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
-          const done=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
-          if(done.paid)return json({...done,order_id:orderId});
-          if(current?.url)return json({ok:true,paid:false,url:current.url,order_id:orderId,charge_iqd:charge});
-        }catch{}
+        let current;
+        try{current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data}
+        catch(e){return json({error:'تعذر استرجاع رابط الدفع الحالي من Wayl. حاول مرة أخرى لاحقاً.',reason:String(e.message||e)},502)}
+        const done=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
+        if(!done.ok)return json({error:done.error||'تعذر التحقق من الطلب'},409);
+        if(done.paid)return json({...done,order_id:orderId});
+        const state=String(current?.status||'').toLowerCase();
+        if(['cancelled','canceled','expired','rejected','failed'].includes(state)||!current?.url){
+          return json({error:'انتهى رابط الدفع السابق أو لم يعد متاحاً. اختر «بدء طلب جديد» للمتابعة.',status:current?.status||'unavailable'},409);
+        }
+        return json({ok:true,paid:false,url:current.url,order_id:orderId,charge_iqd:charge});
       }
       const link=await createWaylLink(env,{referenceId:orderId,total:charge,label:'WarshaTik '+orderId,webhookUrl:origin+'/api/webhooks/wayl',redirectionUrl:origin+'/checkout.html?wayl_order='+encodeURIComponent(orderId)});
       await env.DB.prepare('UPDATE orders SET payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=? WHERE id=?').bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),charge,orderId).run();
