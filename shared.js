@@ -151,7 +151,7 @@ function cartIds(){try{return JSON.parse(localStorage.getItem('warsha-cart')||'[
 function parseCartEntry(entry){const s=String(entry||''),p=s.split('::');return {entry:s,id:p[0],packageType:['software','hardware'].includes(p[1])?p[1]:null}}
 function cartEntry(id,packageType){return packageType?String(id)+'::'+packageType:String(id)}
 function saveCart(ids){localStorage.setItem('warsha-cart',JSON.stringify([...new Set(ids.map(String))]));updateCartCount()}
-function updateCartCount(){const c=cartIds().length;$('[data-cart-count]').forEach(x=>{x.textContent=c;x.style.display=c?'flex':'none'})}
+function updateCartCount(){const c=cartIds().length;$$('[data-cart-count]').forEach(x=>{x.textContent=c;x.style.display=c?'flex':'none'})}
 function allCatalogItems(){const legacy=[...(W?.products||[]),...(W?.courses||[])];const extra=(W?.items||[]).filter(x=>!legacy.some(y=>y.id===x.id));return [...legacy,...extra]}
 window.allCatalogItems=allCatalogItems;
 function addToCart(id,packageType=null){const all=allCatalogItems(),item=all.find(x=>x.id===id);if(!item||!isItemSectionVisible(item)||item.active===false||['sold','coming'].includes(item.status))return false;const entry=cartEntry(id,item.packageEnabled?(packageType||'software'):null);let ids=cartIds();if(item.packageEnabled)ids=ids.filter(x=>parseCartEntry(x).id!==String(id));if(!ids.includes(entry))ids.push(entry);saveCart(ids);return true}
