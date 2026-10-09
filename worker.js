@@ -132,6 +132,68 @@ async function recoveryDownloadsFromFiles(env,db,orderId,itemId,title,filesValue
     return {name,url:`${origin}/api/download/${raw}`,expires_at:exp};
   }));
 }
+async function fastAdminRequestCode(req,env,ctx){
+  const b=await req.json(),email=normEmail(b.email),password=String(b.password||''),allowed=normEmail(env.ADMIN_EMAIL||''),expectedPassword=String(env.ADMIN_PASSWORD||'');
+  if(!allowed)return json({error:'ADMIN_EMAIL missing in Cloudflare Worker'},503);
+  if(!expectedPassword)return json({error:'ADMIN_PASSWORD missing in Cloudflare Worker'},503);
+  if(!validEmail(email)||!password)return json({error:'بيانات الدخول غير صحيحة.'},401);
+  const rateKey=await adminRateKey(req,email),state=await adminRateState(env.DB,rateKey),now=Date.now();
+  if(state.blocked_until>now)return json({error:'محاولات كثيرة. حاول مرة أخرى بعد 30 دقيقة.'},429);
+  const [emailOk,passwordOk]=await Promise.all([secureEqualText(email,allowed),secureEqualText(password,expectedPassword)]);
+  if(!emailOk||!passwordOk){
+    await adminRateFail(env.DB,rateKey,state);
+    return json({error:'بيانات الدخول غير صحيحة.'},401);
+  }
+  await adminRateClear(env.DB,rateKey);
+  const recent=await env.DB.prepare('SELECT created_at FROM admin_login_codes WHERE email=? ORDER BY created_at DESC LIMIT 1').bind(email).first();
+  if(recent&&now-Number(recent.created_at||0)<45000)return json({ok:true,message:'تم إرسال رمز مؤخراً. انتظر قليلاً قبل طلب رمز جديد.'});
+  const code=secureSixDigitCode(),hash=await hashText(code);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM admin_login_codes WHERE email=?').bind(email),
+    env.DB.prepare('INSERT INTO admin_login_codes(id,email,code_hash,expires_at,created_at,attempts) VALUES(?,?,?,?,?,0)').bind(crypto.randomUUID(),email,hash,now+10*60*1000,now)
+  ]);
+  const job=sendEmail(env,email,'رمز دخول لوحة تحكم ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>رمز دخول لوحة التحكم</h2><p style="font-size:32px;font-weight:800;letter-spacing:5px">${code}</p><p>الرمز صالح لمدة 10 دقائق ويستخدم مرة واحدة فقط.</p><p>إذا لم تطلب تسجيل الدخول فتجاهل الرسالة.</p></div>`);
+  if(ctx?.waitUntil)ctx.waitUntil(job);else job.catch(()=>{});
+  return json({ok:true,message:'تم التحقق. سيصل رمز الدخول إلى بريدك خلال لحظات.'});
+}
+async function fastAdminVerifyCode(req,env){
+  const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').replace(/\D/g,''),allowed=normEmail(env.ADMIN_EMAIL||''),now=Date.now();
+  if(!allowed||email!==allowed||code.length!==6)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
+  const rec=await env.DB.prepare('SELECT id,code_hash,attempts FROM admin_login_codes WHERE email=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,now).first();
+  if(!rec)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
+  const hash=await hashText(code);
+  if(hash!==rec.code_hash){
+    const attempts=Number(rec.attempts||0)+1;
+    if(attempts>=5){
+      await env.DB.prepare('DELETE FROM admin_login_codes WHERE id=?').bind(rec.id).run();
+      return json({error:'تم إلغاء الرمز بعد محاولات كثيرة. اطلب رمزاً جديداً.'},401);
+    }
+    await env.DB.prepare('UPDATE admin_login_codes SET attempts=? WHERE id=?').bind(attempts,rec.id).run();
+    return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
+  }
+  const token='wta_'+randomToken(32),tokenHash=await hashText(token),expires=now+12*60*60*1000;
+  await env.DB.batch([
+    env.DB.prepare('UPDATE admin_login_codes SET used_at=? WHERE id=?').bind(now,rec.id),
+    env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at<=?').bind(now),
+    env.DB.prepare('INSERT INTO admin_sessions(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(tokenHash,email,expires,now)
+  ]);
+  return json({ok:true,token,expires_at:expires,email});
+}
+async function fastRecoveryRequest(req,env,ctx){
+  const b=await req.json(),email=normEmail(b.email);
+  if(!validEmail(email))return json({ok:false,error:'Invalid email'},400);
+  const paid=await env.DB.prepare("SELECT COUNT(*) c FROM orders WHERE email=? AND payment_status='paid'").bind(email).first();
+  if(Number(paid?.c||0)>0){
+    const code=secureSixDigitCode(),h=await hashText(code),now=Date.now();
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM recovery_codes WHERE email=?').bind(email),
+      env.DB.prepare('INSERT INTO recovery_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,h,now+15*60*1000,now)
+    ]);
+    const job=sendEmail(env,email,'رمز استرجاع مشتريات ورشة تك',`<div dir="rtl"><h2>رمز استرجاع مشترياتك</h2><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>الرمز صالح لمدة 15 دقيقة.</p></div>`);
+    if(ctx?.waitUntil)ctx.waitUntil(job);else job.catch(()=>{});
+  }
+  return json({ok:true,message:'إذا كان البريد مرتبطاً بمشتريات مدفوعة، سيصل رمز التحقق خلال لحظات.'});
+}
 async function fastRecoveryVerify(req,env,origin){
   const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);
   const rec=await env.DB.prepare('SELECT id FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();
@@ -252,6 +314,19 @@ export default{async fetch(req,env,ctx){
       headers.set('x-warshatik-build','20261008r2');
     }
     return new Response(asset.body,{status:asset.status,statusText:asset.statusText,headers});
+  }
+
+  if(u.pathname==='/api/admin/auth/request-code'&&req.method==='POST'){
+    try{return await fastAdminRequestCode(req,env,ctx)}catch(e){await ensureInit(env.DB);return fastAdminRequestCode(req,env,ctx)}
+  }
+  if(u.pathname==='/api/admin/auth/verify-code'&&req.method==='POST'){
+    try{return await fastAdminVerifyCode(req,env)}catch(e){await ensureInit(env.DB);return fastAdminVerifyCode(req,env)}
+  }
+  if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
+    try{return await fastRecoveryRequest(req,env,ctx)}catch(e){await ensureInit(env.DB);return fastRecoveryRequest(req,env,ctx)}
+  }
+  if(u.pathname==='/api/recovery/verify'&&req.method==='POST'){
+    try{return await fastRecoveryVerify(req,env,origin)}catch(e){await ensureInit(env.DB);return fastRecoveryVerify(req,env,origin)}
   }
 
   if(u.pathname==='/api/admin/auth/session'&&req.method==='GET'){
