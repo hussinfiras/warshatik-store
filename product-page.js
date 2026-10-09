@@ -42,8 +42,12 @@ document.addEventListener('DOMContentLoaded',async()=>{
       if(!item.packageEnabled)return moneyLocal(item);
       const usd=(window.currency?window.currency():'IQD')==='USD';
       const n=activePackage==='hardware'?(usd?item.hardware_price_usd:item.hardware_price_iqd):(usd?item.software_price_usd:item.software_price_iqd);
-      const fallback=usd?item.price_usd:item.price_iqd,v=n??fallback;
-      return usd?'
+      const fallback=usd?item.price_usd:item.price_iqd;
+      const v=n??fallback;
+      return usd?'$'+Number(v||0).toFixed(Number(v||0)%1?2:0):Number(v||0).toLocaleString('en-US')+' د.ع';
+    };
+    const missingDigitalFile=()=>((!item.packageEnabled&&item.digitalOnly!==false)||activePackage==='software')&&item.status!=='free'&&!['sold','coming'].includes(item.status)&&files.length===0;
+    const isDisabled=()=>['sold','coming'].includes(item.status)||blockedByRegion||missingDigitalFile();
     const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
 
