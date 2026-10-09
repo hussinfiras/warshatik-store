@@ -1,4 +1,4 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>استرجاع المشتريات | ورشة تك</title><link rel="stylesheet" href="styles.css?v=20261009-final"><style>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>استرجاع المشتريات | ورشة تك</title><link rel="stylesheet" href="styles.css?v=20261009-fastfix"><style>
 .recover-wrap{max-width:760px;margin:54px auto 70px;padding:0 18px}
 .recover-card{background:#fff;border:1px solid #e7e2eb;border-radius:24px;padding:28px;box-shadow:0 18px 60px rgba(55,35,82,.08)}
 .recover-card h1{margin:0 0 8px;font-size:30px}.recover-card>p{color:#736b7c;line-height:1.85;margin:0 0 20px}
@@ -26,7 +26,7 @@
   if(!email){r$('#msg1').textContent='اكتب البريد الإلكتروني أولاً.';return}
   btn.disabled=true;btn.textContent='جاري الإرسال...';r$('#msg1').textContent='';
   try{
-    const res=await fetch('/api/recovery/request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})});
+    const ctrl=new AbortController(),tm=setTimeout(()=>ctrl.abort(),7000);const res=await fetch('/api/recovery/request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email}),signal:ctrl.signal});clearTimeout(tm);
     const d=await res.json();
     if(!res.ok)throw new Error(d.reason||d.error||'تعذر إرسال البريد');
     r$('#msg1').textContent=d.message||'إذا كان البريد مرتبطاً بمشتريات، سيصلك رمز.';
