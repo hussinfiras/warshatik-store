@@ -399,6 +399,7 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/payments/wayl/start'&&req.method==='POST'){
     try{
+      await ensureInit(env.DB);
       if(!waylConfigured(env))return json({error:'Wayl is not configured yet'},503);
       const b=await req.json(),orderId=String(b.order_id||'').trim();
       const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
@@ -422,6 +423,7 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/payments/wayl/status'&&req.method==='GET'){
     try{
+      await ensureInit(env.DB);
       const raw=String(u.searchParams.get('order_id')||'').trim();
       if(!raw)return json({error:'Missing order_id'},400);
       let order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(raw).first();
@@ -439,6 +441,7 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/consultations/payment-status'&&req.method==='GET'){
     try{
+      await ensureInit(env.DB);
       const code=String(u.searchParams.get('code')||'').replace(/\D/g,'');
       if(code.length!==10)return json({error:'Invalid ticket code'},400);
       const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
