@@ -24,6 +24,6 @@
   "keep_vars": true,
   "vars": {
     "EMAIL_FROM": "WarshaTik <downloads@warshatik.com>",
-    "WAYL_ENV": "test"
+    "WAYL_ENV": "live"
   }
 }
