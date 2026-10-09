@@ -154,7 +154,7 @@ function saveCart(ids){localStorage.setItem('warsha-cart',JSON.stringify([...new
 function updateCartCount(){const c=cartIds().length;$('[data-cart-count]').forEach(x=>{x.textContent=c;x.style.display=c?'block':'none'})}
 function allCatalogItems(){const legacy=[...(W?.products||[]),...(W?.courses||[])];const extra=(W?.items||[]).filter(x=>!legacy.some(y=>y.id===x.id));return [...legacy,...extra]}
 window.allCatalogItems=allCatalogItems;
-function addToCart(id,packageType=null){const all=allCatalogItems(),item=all.find(x=>x.id===id);if(!item||!isItemSectionVisible(item)||item.active===false||['sold','coming'].includes(item.status))return false;const entry=cartEntry(id,item.packageEnabled?(packageType||'software'):null),ids=cartIds();if(!ids.includes(entry))ids.push(entry);saveCart(ids);return true}
+function addToCart(id,packageType=null){const all=allCatalogItems(),item=all.find(x=>x.id===id);if(!item||!isItemSectionVisible(item)||item.active===false||['sold','coming'].includes(item.status))return false;const entry=cartEntry(id,item.packageEnabled?(packageType||'software'):null);let ids=cartIds();if(item.packageEnabled)ids=ids.filter(x=>parseCartEntry(x).id!==String(id));if(!ids.includes(entry))ids.push(entry);saveCart(ids);return true}
 function removeFromCart(entry){saveCart(cartIds().filter(x=>x!==entry))}
 function clearCart(){saveCart([])}
 function itemWords(i){
