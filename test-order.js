@@ -7,7 +7,11 @@
     try{
       sel.disabled=true;
       sel.innerHTML='<option value="">جاري تحميل المنتجات...</option>';
-      const r=await fetch((settings?.apiBase||'https://warshatik.com/api').replace(/\/$/,'')+'/catalog');
+      let r=null,lastErr=null;
+      for(const base of ['https://warshatik-store2.hussainfiras23.workers.dev/api','https://warshatik.com/api']){
+        try{r=await fetch(base+'/catalog',{cache:'no-store'});if(r.ok)break;lastErr=new Error('HTTP '+r.status)}catch(e){lastErr=e}
+      }
+      if(!r)throw lastErr||new Error('Failed to fetch');
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
       const all=[...(d.products||[]),...(d.courses||[])].filter(x=>x&&x.active!==false&&!['sold','coming'].includes(x.status));
