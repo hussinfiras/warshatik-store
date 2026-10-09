@@ -1,1 +1,1 @@
-Trigger admin deployment for hardware package save bridge and refreshed scripts.
+Trigger admin deployment for hardware-only Iraq setting.
