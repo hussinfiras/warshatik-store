@@ -91,6 +91,8 @@ async function loadStoreSettings(){
     window.dispatchEvent(new CustomEvent('warsha:sections-loaded',{detail:window.wtStoreSections}));
     updateVisibilityButtons();
 
+    if(q('#exchangeRate'))q('#exchangeRate').value=Number(s.exchange_rate_iqd_per_usd||1500);
+    if(q('#exchangeRatePreview'))q('#exchangeRatePreview').textContent=Number(s.exchange_rate_iqd_per_usd||1500).toLocaleString('en-US');
     if(q('#waylFeePercent'))q('#waylFeePercent').value=s.wayl_fee_percent??'';
     if(q('#waylFixedIQD'))q('#waylFixedIQD').value=s.wayl_fixed_iqd??'';
     if(q('#waylFixedUSD'))q('#waylFixedUSD').value=s.wayl_fixed_usd??'';
@@ -131,6 +133,7 @@ async function saveStoreSettings(extra={}){
     wayl_fee_percent:Number(q('#waylFeePercent')?.value||0),
     wayl_fixed_iqd:Number(q('#waylFixedIQD')?.value||0),
     wayl_fixed_usd:Number(q('#waylFixedUSD')?.value||0),
+    exchange_rate_iqd_per_usd:Number(q('#exchangeRate')?.value||1500),
     ...extra
   };
   const d=await bridge('save-settings',payload);
@@ -285,6 +288,7 @@ async function checkSystemHealth(){
 q('#checkSystemHealth')?.addEventListener('click',checkSystemHealth);
 window.checkSystemHealth=checkSystemHealth;
 
+q('#exchangeRate')?.addEventListener('input',e=>{const n=Number(e.target.value||1500);if(q('#exchangeRatePreview'))q('#exchangeRatePreview').textContent=n.toLocaleString('en-US')});
 q('#saveSettings')?.addEventListener('click',async()=>{
   try{await saveStoreSettings();toast('تم حفظ الإعدادات')}catch(e){alert(e.message)}
 });
