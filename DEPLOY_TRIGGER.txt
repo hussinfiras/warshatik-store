@@ -1,1 +1,1 @@
-Trigger deployment for final product page stability, Wayl return verification, and recovery timeout fixes.
+Trigger deployment for robust hardware-package saving, schema guard, and catalog error recovery.
