@@ -281,8 +281,8 @@ async function checkSystemHealth(){
   try{
     const d=await bridge('health');
     const set=(id,ok)=>{const el=q(id);if(el){el.textContent=ok?'يعمل ✓':'مشكلة ✕';el.className=ok?'health-ok':'health-bad'}};
-    set('#healthDb',!!d.db);set('#healthR2',!!d.r2);set('#healthEmail',!!d.email?.resend_key&&!!d.email?.from);set('#healthWayl',!!d.wayl?.token&&!!d.wayl?.webhook_secret);set('#healthAdmin',!!d.admin_key);
-    if(detail)detail.textContent=(!d.email?.resend_key?'RESEND_API_KEY غير موجود. ':'')+(!d.email?.from?'EMAIL_FROM غير موجود. ':'')+(!d.wayl?.token?'WAYL_API_TOKEN غير موجود. ':'')+(!d.wayl?.webhook_secret?'WAYL_WEBHOOK_SECRET غير موجود. ':'')+(d.wayl?.env?'Wayl env: '+d.wayl.env+'. ':'')+(d.email?.from_value?'Sender: '+d.email.from_value:'');
+    set('#healthDb',!!d.db);set('#healthR2',!!d.r2);set('#healthEmail',!!d.email?.resend_key&&!!d.email?.from);set('#healthWayl',!!d.wayl?.token&&!!d.wayl?.webhook_secret);set('#healthAdmin',!!d.admin_auth?.email&&!!d.admin_auth?.password);
+    if(detail)detail.textContent=(!d.email?.resend_key?'RESEND_API_KEY غير موجود. ':'')+(!d.email?.from?'EMAIL_FROM غير موجود. ':'')+(!d.wayl?.token?'WAYL_API_TOKEN غير موجود. ':'')+(!d.wayl?.webhook_secret?'WAYL_WEBHOOK_SECRET غير موجود. ':'')+(!d.admin_auth?.email?'ADMIN_EMAIL غير موجود. ':'')+(!d.admin_auth?.password?'ADMIN_PASSWORD غير موجود. ':'')+(d.wayl?.env?'Wayl env: '+d.wayl.env+'. ':'')+(d.email?.from_value?'Sender: '+d.email.from_value:'');
   }catch(e){if(detail)detail.textContent='❌ '+e.message}
 }
 q('#checkSystemHealth')?.addEventListener('click',checkSystemHealth);
