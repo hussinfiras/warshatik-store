@@ -1,1 +1,1 @@
-Trigger deployment for Wayl payment links, signed webhook verification, payment return verification, and consultation payments.
+Trigger deployment for robust Wayl return order lookup and local order persistence.
