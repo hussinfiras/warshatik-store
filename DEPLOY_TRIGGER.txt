@@ -1,1 +1,1 @@
-Trigger deployment for robust hardware-package saving, schema guard, and catalog error recovery.
+Trigger deployment for hardware-only Iraq restriction, package price colors, cart badge/message fixes, and resilient Wayl checkout API handling.
