@@ -68,14 +68,14 @@ async function startAdmin(){
   if(login)login.hidden=true;
   document.body.classList.remove('admin-auth-pending');
   const scripts=[
-    'app.js?v=20261009j',
-    'domain-migrate.js?v=20261009j',
-    'store-tools.js?v=20261009j',
-    'section-manager.js?v=20261009j',
-    'consultation-admin.js?v=20261009j',
-    'admin-ui-guard.js?v=20261009j',
-    'customer-admin.js?v=20261009j',
-    'test-order.js?v=20261009j'
+    'app.js?v=20261009k',
+    'domain-migrate.js?v=20261009k',
+    'store-tools.js?v=20261009k',
+    'section-manager.js?v=20261009k',
+    'consultation-admin.js?v=20261009k',
+    'admin-ui-guard.js?v=20261009k',
+    'customer-admin.js?v=20261009k',
+    'test-order.js?v=20261009k'
   ];
   try{
     for(const src of scripts)await loadScript(src);
