@@ -1,1 +1,1 @@
-Trigger admin deployment for visible mobile navigation labels and sticky horizontal section bar.
+FINAL ADMIN DEPLOY: production auth, Wayl live health, current fee estimator, and final asset refresh.
