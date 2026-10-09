@@ -1,5 +1,5 @@
 (()=>{
-const API_BASES=['https://warshatik-store2.hussainfiras23.workers.dev/api','https://warshatik.com/api'];
+const API_BASES=['https://warshatik.com/api','https://warshatik-store2.hussainfiras23.workers.dev/api'];
 const API=API_BASES[0];
 const $=s=>document.querySelector(s);
 const login=$('#adminLogin'),emailStep=$('#adminLoginEmailStep'),codeStep=$('#adminLoginCodeStep');
@@ -27,7 +27,7 @@ async function call(path,opt={}){
   const token=getToken();if(token)headers['x-admin-key']=token;
   let lastErr=null;
   for(const base of API_BASES){
-    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),15000);
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),8000);
     try{
       const r=await fetch(base+path,{...opt,headers,signal:ctrl.signal,cache:'no-store'});
       let d={};try{d=await r.json()}catch{}
