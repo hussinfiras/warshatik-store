@@ -35,9 +35,10 @@ document.addEventListener('DOMContentLoaded',async()=>{
 
     document.title=item.title+' | ورشة تك';
     let blockedByRegion=false;
-    const files=(item.files||[]).filter(f=>f&&(typeof f==='string'||f.key||f.url));
+    const asArray=v=>Array.isArray(v)?v:[];
+    const files=asArray(item.files).filter(f=>f&&(typeof f==='string'||f.key||f.url));
     let activePackage=item.packageEnabled?'software':null;
-    const packageFeatures=()=>activePackage==='software'?(item.softwareFeatures||item.features||[]):activePackage==='hardware'?(item.hardwareFeatures||item.features||[]):item.features||[];
+    const packageFeatures=()=>activePackage==='software'?asArray(item.softwareFeatures?.length?item.softwareFeatures:item.features):activePackage==='hardware'?asArray(item.hardwareFeatures?.length?item.hardwareFeatures:item.features):asArray(item.features);
     const packageMoney=()=>{
       if(!item.packageEnabled)return moneyLocal(item);
       const usd=(window.currency?window.currency():'IQD')==='USD';
@@ -48,7 +49,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     };
     const missingDigitalFile=()=>((!item.packageEnabled&&item.digitalOnly!==false)||activePackage==='software')&&item.status!=='free'&&!['sold','coming'].includes(item.status)&&files.length===0;
     const isDisabled=()=>['sold','coming'].includes(item.status)||blockedByRegion||missingDigitalFile();
-    const imgs=(item.images||[]).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
+    const imgs=asArray(item.images).map(x=>typeof x==='string'?{url:x,name:x}:x).filter(x=>x?.url);
     const main=imgs[0]?.url||'';
 
     const regionalPriceHtml=()=>item.status==='coming'?'':(item.status==='free'?'<span class="free-price detail-free"><b>مجاني</b></span>':'<strong>'+packageMoney()+'</strong>');
@@ -108,17 +109,22 @@ ${item.status==='coming'?'':`<div class="detail-price ${item.status==='sale'?'de
         }
       }).catch(()=>{});
     }
-    if(window.recommendItems&&window.recommendationCards){
-      const recs=window.recommendItems([item],3);
-      if(recs.length){
-        document.getElementById('recommendGrid').innerHTML=window.recommendationCards(recs);
-        document.getElementById('recommendSection').hidden=false;
+    try{
+      if(window.recommendItems&&window.recommendationCards){
+        const recs=window.recommendItems([item],3);
+        if(recs.length){
+          document.getElementById('recommendGrid').innerHTML=window.recommendationCards(recs);
+          document.getElementById('recommendSection').hidden=false;
+        }
       }
-    }
-    if(window.reveal)window.reveal();
-    else document.querySelectorAll('.reveal').forEach(x=>x.classList.add('visible'));
+    }catch(e){console.warn('Recommendations skipped',e)}
+    try{if(window.reveal)window.reveal();else document.querySelectorAll('.reveal').forEach(x=>x.classList.add('visible'))}catch(e){document.querySelectorAll('.reveal').forEach(x=>x.classList.add('visible'))}
   }catch(err){
     console.error(err);
+    if(root&&root.children.length){
+      document.querySelectorAll('.reveal').forEach(x=>x.classList.add('visible'));
+      return;
+    }
     root.innerHTML='<div class="empty-card"><h1>تعذر تحميل المنتج</h1><p>حدث خطأ أثناء تحميل البيانات. حاول تحديث الصفحة.</p></div>';
   }
 });
