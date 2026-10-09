@@ -19,9 +19,14 @@ async function init(db){
   try{await db.exec(`ALTER TABLE items ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS consultation_tickets(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,customer_name TEXT NOT NULL,contact_method TEXT NOT NULL,contact_value TEXT,scheduled_date TEXT NOT NULL,consultation_type TEXT NOT NULL,amount_iqd REAL NOT NULL,status TEXT NOT NULL DEFAULT 'issued',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN amount_usd REAL NOT NULL DEFAULT 0`)}catch{}
+  try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN wayl_link_id TEXT`)}catch{}
+  try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN wayl_code TEXT`)}catch{}
   try{await db.exec(`UPDATE consultation_tickets SET amount_usd=CASE WHEN consultation_type='supervision' THEN 75 ELSE 15 END WHERE amount_usd=0`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,email TEXT NOT NULL,currency TEXT NOT NULL,total REAL NOT NULL,payment_status TEXT NOT NULL DEFAULT 'pending',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   try{await db.exec(`ALTER TABLE orders ADD COLUMN customer_name TEXT NOT NULL DEFAULT ''`)}catch{}
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_link_id TEXT`)}catch{}
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_code TEXT`)}catch{}
+  try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_charge_iqd INTEGER`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
@@ -95,6 +100,79 @@ async function fastRecoveryVerify(req,env,origin){
   const items=await Promise.all((rows.results||[]).map(async it=>({order_id:it.order_id,item_id:it.item_id,title:it.title,downloads:await recoveryDownloadsFromFiles(env,env.DB,it.order_id,it.item_id,it.title,it.files,origin)})));
   return json({ok:true,items});
 }
+function waylConfigured(env){return !!env.WAYL_API_TOKEN&&!!env.WAYL_WEBHOOK_SECRET}
+function waylEnv(env){return String(env.WAYL_ENV||'test').toLowerCase()==='live'?'live':'test'}
+async function waylRequest(env,path,opts={}){
+  if(!env.WAYL_API_TOKEN)throw new Error('WAYL_API_TOKEN missing in Cloudflare Worker');
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const r=await fetch('https://api.thewayl.com'+path,{
+      ...opts,
+      headers:{'X-WAYL-AUTHENTICATION':env.WAYL_API_TOKEN,'content-type':'application/json',...(opts.headers||{})},
+      signal:controller.signal
+    });
+    let data={};try{data=await r.json()}catch{}
+    if(!r.ok)throw new Error(data.message||data.error||('Wayl HTTP '+r.status));
+    return data;
+  }catch(e){
+    if(e?.name==='AbortError')throw new Error('Wayl API timeout');
+    throw e;
+  }finally{clearTimeout(timer)}
+}
+async function verifyWaylSignature(raw,signature,secret){
+  if(!signature||!secret)return false;
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const sig=new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(raw)));
+  const expected=[...sig].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const got=String(signature||'').trim().toLowerCase();
+  if(got.length!==expected.length)return false;
+  let diff=0;for(let i=0;i<expected.length;i++)diff|=expected.charCodeAt(i)^got.charCodeAt(i);
+  return diff===0;
+}
+async function orderChargeIQD(db,order){
+  if(order.currency==='IQD')return Math.round(Number(order.total||0));
+  const s=await getSettings(db),rate=Number(s.exchange_rate_iqd_per_usd||1500);
+  return Math.round(Number(order.total||0)*rate);
+}
+async function createWaylLink(env,{referenceId,total,label,webhookUrl,redirectionUrl}){
+  if(!env.WAYL_WEBHOOK_SECRET)throw new Error('WAYL_WEBHOOK_SECRET missing in Cloudflare Worker');
+  const payload={
+    env:waylEnv(env),referenceId,total:Math.round(total),currency:'IQD',customParameter:'',
+    lineItem:[{label:String(label||'WarshaTik order').slice(0,120),amount:Math.round(total),type:'increase'}],
+    webhookUrl,webhookSecret:env.WAYL_WEBHOOK_SECRET,redirectionUrl
+  };
+  const out=await waylRequest(env,'/api/v1/links',{method:'POST',body:JSON.stringify(payload)});
+  if(!out?.data?.url)throw new Error('Wayl did not return a checkout URL');
+  return out.data;
+}
+function waylPaidStatus(data){
+  const s=String(data?.status||'').toLowerCase();
+  return s==='complete'||s==='delivered';
+}
+async function finalizeWaylOrder(env,db,orderId,origin,waylData){
+  const order=await db.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+  if(!order)return {ok:false,error:'Order not found'};
+  const expected=await orderChargeIQD(db,order);
+  const actual=Math.round(Number(waylData?.total||0));
+  if(actual!==expected)return {ok:false,error:'Wayl amount mismatch'};
+  if(!waylPaidStatus(waylData))return {ok:true,paid:false,status:waylData?.status||'Unknown'};
+  if(order.payment_status==='paid')return {ok:true,paid:true,already_paid:true};
+  await db.prepare("UPDATE orders SET payment_status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP,wayl_link_id=COALESCE(wayl_link_id,?),wayl_code=COALESCE(wayl_code,?),wayl_charge_iqd=? WHERE id=?")
+    .bind(String(waylData.id||waylData.code||'WAYL'),String(waylData.id||''),String(waylData.code||''),actual,orderId).run();
+  const mail=await sendPurchaseEmail(env,db,orderId,origin);
+  return {ok:true,paid:true,email_sent:!!mail.sent,email_reason:mail.reason||null};
+}
+async function finalizeWaylConsultation(env,db,code,waylData){
+  const t=await db.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+  if(!t)return {ok:false,error:'Ticket not found'};
+  const expected=Math.round(Number(t.amount_iqd||0)),actual=Math.round(Number(waylData?.total||0));
+  if(actual!==expected)return {ok:false,error:'Wayl amount mismatch'};
+  if(!waylPaidStatus(waylData))return {ok:true,paid:false,status:waylData?.status||'Unknown'};
+  if(t.status==='paid'||t.status==='completed')return {ok:true,paid:true,already_paid:true};
+  await db.prepare("UPDATE consultation_tickets SET status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP,wayl_link_id=COALESCE(wayl_link_id,?),wayl_code=COALESCE(wayl_code,?) WHERE code=?")
+    .bind(String(waylData.id||waylData.code||'WAYL'),String(waylData.id||''),String(waylData.code||''),code).run();
+  return {ok:true,paid:true};
+}
 async function sendPurchaseEmail(env,db,orderId,origin){
   const order=await db.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();if(!order||order.payment_status!=='paid')return {sent:false};
   const {results}=await db.prepare('SELECT * FROM order_items WHERE order_id=?').bind(orderId).all();let blocks='';
@@ -137,7 +215,73 @@ export default{async fetch(req,env){
     }
   }
 
+  if(u.pathname==='/api/webhooks/wayl'&&req.method==='POST'){
+    await ensureInit(env.DB);
+    const raw=await req.text(),signature=req.headers.get('x-wayl-signature-256')||'';
+    const valid=await verifyWaylSignature(raw,signature,env.WAYL_WEBHOOK_SECRET||'');
+    if(!valid)return json({error:'Invalid Wayl signature'},401);
+    let event={};try{event=JSON.parse(raw)}catch{return json({error:'Invalid JSON'},400)}
+    const ref=String(event.referenceId||'');
+    if(!ref)return json({ok:true});
+    try{
+      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
+      if(ref.startsWith('CONS-')){
+        const code=ref.slice(5),out=await finalizeWaylConsultation(env,env.DB,code,current);
+        return json(out,out.ok?200:400);
+      }
+      const out=await finalizeWaylOrder(env,env.DB,ref,origin,current);
+      return json(out,out.ok?200:400);
+    }catch(e){return json({error:e.message||'Wayl webhook processing failed'},502)}
+  }
+
   await ensureInit(env.DB);
+
+  if(u.pathname==='/api/payments/wayl/start'&&req.method==='POST'){
+    try{
+      if(!waylConfigured(env))return json({error:'Wayl is not configured yet'},503);
+      const b=await req.json(),orderId=String(b.order_id||'');
+      const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if(!order)return json({error:'Order not found'},404);
+      if(order.payment_status==='paid')return json({ok:true,paid:true});
+      if(Number(order.total||0)<=0)return json({error:'Free orders do not use Wayl'},400);
+      const charge=await orderChargeIQD(env.DB,order);
+      const link=await createWaylLink(env,{
+        referenceId:orderId,total:charge,label:'WarshaTik '+orderId,
+        webhookUrl:origin+'/api/webhooks/wayl',
+        redirectionUrl:origin+'/checkout.html?wayl_order='+encodeURIComponent(orderId)
+      });
+      await env.DB.prepare('UPDATE orders SET payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=? WHERE id=?')
+        .bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),charge,orderId).run();
+      return json({ok:true,url:link.url,order_id:orderId,charge_iqd:charge,env:waylEnv(env)});
+    }catch(e){return json({error:e.message||'Unable to start Wayl payment'},502)}
+  }
+
+  if(u.pathname==='/api/payments/wayl/status'&&req.method==='GET'){
+    try{
+      const orderId=String(u.searchParams.get('order_id')||'');
+      if(!orderId)return json({error:'Missing order_id'},400);
+      const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if(!order)return json({error:'Order not found'},404);
+      if(order.payment_status==='paid')return json({ok:true,paid:true,order_id:orderId});
+      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
+      const out=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
+      return json({...out,order_id:orderId,wayl_status:current?.status||null},out.ok?200:400);
+    }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
+  }
+
+  if(u.pathname==='/api/consultations/payment-status'&&req.method==='GET'){
+    try{
+      const code=String(u.searchParams.get('code')||'').replace(/\D/g,'');
+      if(code.length!==10)return json({error:'Invalid ticket code'},400);
+      const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+      if(!t)return json({error:'Ticket not found'},404);
+      if(t.status==='paid'||t.status==='completed')return json({ok:true,paid:true,ticket:t});
+      const ref='CONS-'+code,current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
+      const out=await finalizeWaylConsultation(env,env.DB,code,current);
+      const updated=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+      return json({...out,ticket:updated,wayl_status:current?.status||null},out.ok?200:400);
+    }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
+  }
 
   if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
 
@@ -214,14 +358,24 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
-    const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
-    const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
-    if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
-    if(t.status==='paid')return json({ok:true,paid:true,ticket:t});
-    if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
-    if(t.status==='ended')return json({error:'انتهت الجلسة، حاول مرة أخرى.'},400);
-    await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending' WHERE code=? AND status='issued'").bind(code).run();
-    return json({ok:true,payment_ready:false,code,amount_iqd:t.amount_iqd,amount_usd:t.amount_usd||0,message:'التذكرة جاهزة للدفع. سيتم ربطها ببوابة Wayl في مرحلة تفعيل الدفع النهائية.'});
+    try{
+      if(!waylConfigured(env))return json({error:'Wayl is not configured yet'},503);
+      const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
+      const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+      if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
+      if(t.status==='paid'||t.status==='completed')return json({ok:true,paid:true,ticket:t});
+      if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
+      if(t.status==='ended')return json({error:'انتهت الجلسة، حاول مرة أخرى.'},400);
+      const ref='CONS-'+code,amount=Math.round(Number(t.amount_iqd||0));
+      const link=await createWaylLink(env,{
+        referenceId:ref,total:amount,label:'WarshaTik consultation '+code,
+        webhookUrl:origin+'/api/webhooks/wayl',
+        redirectionUrl:origin+'/consultations.html?wayl_consult='+encodeURIComponent(code)
+      });
+      await env.DB.prepare("UPDATE consultation_tickets SET status='payment_pending',payment_reference=?,wayl_link_id=?,wayl_code=? WHERE code=?")
+        .bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),code).run();
+      return json({ok:true,paid:false,url:link.url,code,amount_iqd:amount,env:waylEnv(env)});
+    }catch(e){return json({error:e.message||'تعذر بدء الدفع عبر Wayl'},502)}
   }
 
   if(u.pathname==='/api/recovery/request'&&req.method==='POST'){
@@ -255,7 +409,7 @@ export default{async fetch(req,env){
     if(b.action==='health'){
       let db_ok=false,r2_ok=!!env.MEDIA;
       try{await env.DB.prepare('SELECT 1 x').first();db_ok=true}catch{}
-      return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},admin_key:!!env.ADMIN_KEY});
+      return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},wayl:{token:!!env.WAYL_API_TOKEN,webhook_secret:!!env.WAYL_WEBHOOK_SECRET,env:waylEnv(env)},admin_key:!!env.ADMIN_KEY});
     }
     if(b.action==='stats'){
       const s=await getSettings(env.DB),resetAt=s.stats_reset_at||'1970-01-01T00:00:00Z';
