@@ -148,12 +148,14 @@ window.applyStoreVisibility=applyStoreVisibility;
 window.storefrontReady.then(applyStoreVisibility);window.storefrontRefresh?.then(applyStoreVisibility);
 
 function cartIds(){try{return JSON.parse(localStorage.getItem('warsha-cart')||'[]')}catch{return[]}}
-function saveCart(ids){localStorage.setItem('warsha-cart',JSON.stringify([...new Set(ids)]));updateCartCount()}
-function updateCartCount(){const c=cartIds().length;$$('[data-cart-count]').forEach(x=>{x.textContent=c;x.style.display=c?'block':'none'})}
+function parseCartEntry(entry){const s=String(entry||''),p=s.split('::');return {entry:s,id:p[0],packageType:['software','hardware'].includes(p[1])?p[1]:null}}
+function cartEntry(id,packageType){return packageType?String(id)+'::'+packageType:String(id)}
+function saveCart(ids){localStorage.setItem('warsha-cart',JSON.stringify([...new Set(ids.map(String))]));updateCartCount()}
+function updateCartCount(){const c=cartIds().length;$('[data-cart-count]').forEach(x=>{x.textContent=c;x.style.display=c?'block':'none'})}
 function allCatalogItems(){const legacy=[...(W?.products||[]),...(W?.courses||[])];const extra=(W?.items||[]).filter(x=>!legacy.some(y=>y.id===x.id));return [...legacy,...extra]}
 window.allCatalogItems=allCatalogItems;
-function addToCart(id){const all=allCatalogItems(),item=all.find(x=>x.id===id);if(!item||!isItemSectionVisible(item)||item.active===false||['sold','coming'].includes(item.status))return false;const ids=cartIds();if(!ids.includes(id))ids.push(id);saveCart(ids);return true}
-function removeFromCart(id){saveCart(cartIds().filter(x=>x!==id))}
+function addToCart(id,packageType=null){const all=allCatalogItems(),item=all.find(x=>x.id===id);if(!item||!isItemSectionVisible(item)||item.active===false||['sold','coming'].includes(item.status))return false;const entry=cartEntry(id,item.packageEnabled?(packageType||'software'):null),ids=cartIds();if(!ids.includes(entry))ids.push(entry);saveCart(ids);return true}
+function removeFromCart(entry){saveCart(cartIds().filter(x=>x!==entry))}
 function clearCart(){saveCart([])}
 function itemWords(i){
   const raw=[i.title,i.category,i.short,i.description,...(i.features||[]),...(i.keywords||[])].filter(Boolean).join(' ').toLowerCase();
@@ -186,7 +188,7 @@ function recommendationCards(items){
 }
 window.recommendItems=recommendItems;window.recommendationCards=recommendationCards;
 
-window.addToCart=addToCart;window.removeFromCart=removeFromCart;window.clearCart=clearCart;window.cartIds=cartIds;
+window.addToCart=addToCart;window.removeFromCart=removeFromCart;window.clearCart=clearCart;window.cartIds=cartIds;window.parseCartEntry=parseCartEntry;window.cartEntry=cartEntry;
 
 function renderHomeQuickCards(settings){
   if(document.body?.dataset?.page!=='home')return;
