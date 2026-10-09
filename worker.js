@@ -503,6 +503,8 @@ export default{async fetch(req,env,ctx){
   }
 
   if(u.pathname==='/api/orders/create'&&req.method==='POST'){
+    try{
+      await ensureInit(env.DB);
     const b=await req.json(),name=String(b.name||'').trim(),email=normEmail(b.email),currency=(req.cf?.country==='IQ'?'IQD':'USD');if(name.length<2)return json({error:'Name is required'},400);if(!validEmail(email))return json({error:'Invalid email'},400);
     const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
     const vis=await getSettings(env.DB),sections=Array.isArray(vis.sections)?vis.sections:[];let total=0,selected=[];
@@ -529,6 +531,10 @@ export default{async fetch(req,env,ctx){
       for(const it of selected){if(it.packageType==='hardware')continue;const links=await makeDownloadLinks(env,env.DB,orderId,it.id,origin);downloads.push(...links.map(l=>({item_id:it.id,item_title:it.title,name:l.name,url:l.url})))}
     }
     return json({ok:true,order_id:orderId,email,currency,total,free:freeOrder,email_sent:mail.sent||false,email_reason:mail.reason||null,downloads});
+    }catch(error){
+      console.error('order-create failed',error);
+      return json({error:'تعذر تجهيز الطلب بسبب خطأ في قاعدة البيانات أو إعدادات المنتج. حاول مرة أخرى أو تواصل مع الدعم.',code:'ORDER_CREATE_FAILED'},500);
+    }
   }
 
   if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
