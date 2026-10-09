@@ -620,3 +620,10 @@ body[data-page="home"] .fallback-hero.with-news p{
   body[data-page="home"] .fallback-hero.with-news{padding:30px 0 18px!important}
   body[data-page="home"] .fallback-hero.with-news h1{font-size:32px!important}
 }
+
+/* Stability override: content must never disappear because of reveal JS */
+.reveal{
+  opacity:1!important;
+  transform:none!important;
+  visibility:visible!important;
+}
