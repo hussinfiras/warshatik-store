@@ -32,7 +32,9 @@ async function init(db){
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS store_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS admin_login_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
+  try{await db.exec(`ALTER TABLE admin_login_codes ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS admin_sessions(token_hash TEXT PRIMARY KEY,email TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
+  await db.exec(`CREATE TABLE IF NOT EXISTS admin_auth_attempts(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL DEFAULT 0,window_start INTEGER NOT NULL,blocked_until INTEGER NOT NULL DEFAULT 0);`);
   const c=await db.prepare('SELECT COUNT(*) c FROM items').first();
   if(Number(c.c)===0){for(const x of SEED)await db.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`).bind(x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7],x[8],x[9],x[10],x[11],JSON.stringify(x[12]),JSON.stringify(x[13]),JSON.stringify(x[14]),x[15],x[16],x[17]).run();}
 }
@@ -58,6 +60,31 @@ function secureSixDigitCode(){
   const a=new Uint32Array(1);crypto.getRandomValues(a);
   return String(100000+(a[0]%900000)).padStart(6,'0');
 }
+async function secureEqualText(a,b){
+  const [ha,hb]=await Promise.all([hashText(String(a||'')),hashText(String(b||''))]);
+  if(ha.length!==hb.length)return false;
+  let diff=0;for(let i=0;i<ha.length;i++)diff|=ha.charCodeAt(i)^hb.charCodeAt(i);
+  return diff===0;
+}
+async function adminRateKey(req,email){
+  const ip=String(req.headers.get('cf-connecting-ip')||'unknown');
+  return hashText(ip+'|'+normEmail(email));
+}
+async function adminRateState(db,key){
+  const now=Date.now(),r=await db.prepare('SELECT attempts,window_start,blocked_until FROM admin_auth_attempts WHERE key=?').bind(key).first();
+  if(!r)return {attempts:0,window_start:now,blocked_until:0};
+  if(Number(r.blocked_until||0)>now)return {attempts:Number(r.attempts||0),window_start:Number(r.window_start||now),blocked_until:Number(r.blocked_until||0)};
+  if(now-Number(r.window_start||0)>15*60*1000)return {attempts:0,window_start:now,blocked_until:0};
+  return {attempts:Number(r.attempts||0),window_start:Number(r.window_start||now),blocked_until:0};
+}
+async function adminRateFail(db,key,state){
+  const now=Date.now(),attempts=Number(state.attempts||0)+1,blocked=attempts>=5?now+30*60*1000:0;
+  await db.prepare(`INSERT INTO admin_auth_attempts(key,attempts,window_start,blocked_until) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET attempts=excluded.attempts,window_start=excluded.window_start,blocked_until=excluded.blocked_until`)
+    .bind(key,attempts,state.window_start||now,blocked).run();
+  return blocked;
+}
+async function adminRateClear(db,key){await db.prepare('DELETE FROM admin_auth_attempts WHERE key=?').bind(key).run()}
+
 async function clearStoreCaches(origin){
   const cache=globalThis.caches?.default;if(!cache)return;
   try{await cache.delete(new Request(origin+'/api/catalog-cache'))}catch{}
@@ -318,29 +345,44 @@ export default{async fetch(req,env){
   }
 
   if(u.pathname==='/api/admin/auth/request-code'&&req.method==='POST'){
-    const b=await req.json(),email=normEmail(b.email),allowed=normEmail(env.ADMIN_EMAIL||'');
+    const b=await req.json(),email=normEmail(b.email),password=String(b.password||''),allowed=normEmail(env.ADMIN_EMAIL||''),expectedPassword=String(env.ADMIN_PASSWORD||'');
     if(!allowed)return json({error:'ADMIN_EMAIL missing in Cloudflare Worker'},503);
-    if(!validEmail(email))return json({error:'Invalid email'},400);
-    const generic={ok:true,message:'إذا كان البريد مخولاً، سيتم إرسال رمز التحقق.'};
-    if(email!==allowed)return json(generic);
-    const now=Date.now();
+    if(!expectedPassword)return json({error:'ADMIN_PASSWORD missing in Cloudflare Worker'},503);
+    if(!validEmail(email)||!password)return json({error:'بيانات الدخول غير صحيحة.'},401);
+    const rateKey=await adminRateKey(req,email),state=await adminRateState(env.DB,rateKey),now=Date.now();
+    if(state.blocked_until>now)return json({error:'محاولات كثيرة. حاول مرة أخرى بعد 30 دقيقة.'},429);
+    const [emailOk,passwordOk]=await Promise.all([secureEqualText(email,allowed),secureEqualText(password,expectedPassword)]);
+    if(!emailOk||!passwordOk){
+      await adminRateFail(env.DB,rateKey,state);
+      return json({error:'بيانات الدخول غير صحيحة.'},401);
+    }
+    await adminRateClear(env.DB,rateKey);
     const recent=await env.DB.prepare('SELECT created_at FROM admin_login_codes WHERE email=? ORDER BY created_at DESC LIMIT 1').bind(email).first();
     if(recent&&now-Number(recent.created_at||0)<60000)return json({ok:true,message:'تم إرسال رمز مؤخراً. انتظر دقيقة قبل طلب رمز جديد.'});
     const code=secureSixDigitCode(),hash=await hashText(code);
     await env.DB.prepare('DELETE FROM admin_login_codes WHERE email=?').bind(email).run();
-    await env.DB.prepare('INSERT INTO admin_login_codes(id,email,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),email,hash,now+10*60*1000,now).run();
-    const mail=await sendEmail(env,email,'رمز دخول لوحة تحكم ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>رمز دخول لوحة التحكم</h2><p style="font-size:32px;font-weight:800;letter-spacing:5px">${code}</p><p>الرمز صالح لمدة 10 دقائق. إذا لم تطلب تسجيل الدخول فتجاهل الرسالة.</p></div>`);
+    await env.DB.prepare('INSERT INTO admin_login_codes(id,email,code_hash,expires_at,created_at,attempts) VALUES(?,?,?,?,?,0)').bind(crypto.randomUUID(),email,hash,now+10*60*1000,now).run();
+    const mail=await sendEmail(env,email,'رمز دخول لوحة تحكم ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>رمز دخول لوحة التحكم</h2><p style="font-size:32px;font-weight:800;letter-spacing:5px">${code}</p><p>الرمز صالح لمدة 10 دقائق ويستخدم مرة واحدة فقط.</p><p>إذا لم تطلب تسجيل الدخول فتجاهل الرسالة.</p></div>`);
     if(!mail.sent)return json({error:mail.reason||'Email failed'},502);
-    return json({ok:true,message:'تم إرسال رمز التحقق إلى بريدك.'});
+    return json({ok:true,message:'تم قبول كلمة المرور وإرسال رمز التحقق إلى بريدك.'});
   }
 
   if(u.pathname==='/api/admin/auth/verify-code'&&req.method==='POST'){
     const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').replace(/\D/g,''),allowed=normEmail(env.ADMIN_EMAIL||''),now=Date.now();
     if(!allowed||email!==allowed||code.length!==6)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
-    const hash=await hashText(code);
-    const rec=await env.DB.prepare('SELECT id FROM admin_login_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,hash,now).first();
+    const rec=await env.DB.prepare('SELECT id,code_hash,attempts FROM admin_login_codes WHERE email=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,now).first();
     if(!rec)return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
-    const token='wta_'+randomToken(32),tokenHash=await hashText(token),expires=now+7*24*60*60*1000;
+    const hash=await hashText(code),ok=await secureEqualText(hash,rec.code_hash);
+    if(!ok){
+      const attempts=Number(rec.attempts||0)+1;
+      if(attempts>=5){
+        await env.DB.prepare('DELETE FROM admin_login_codes WHERE id=?').bind(rec.id).run();
+        return json({error:'تم إلغاء الرمز بعد محاولات كثيرة. اطلب رمزاً جديداً.'},401);
+      }
+      await env.DB.prepare('UPDATE admin_login_codes SET attempts=? WHERE id=?').bind(attempts,rec.id).run();
+      return json({error:'رمز التحقق غير صحيح أو منتهي.'},401);
+    }
+    const token='wta_'+randomToken(32),tokenHash=await hashText(token),expires=now+12*60*60*1000;
     await Promise.all([
       env.DB.prepare('UPDATE admin_login_codes SET used_at=? WHERE id=?').bind(now,rec.id).run(),
       env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at<=?').bind(now).run(),
