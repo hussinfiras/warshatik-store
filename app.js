@@ -4,7 +4,8 @@ let products=[],courses=[],allItems=[],editing=null,currentImages=[],currentFile
 function readLocalJson(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch(e){console.warn('Bad local storage:',key,e);return null}}
 let consultations=readLocalJson('wt_consults')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
 let settings=readLocalJson('wt_settings')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik.com/api',adminKey:''};
-const ADMIN_API='https://warshatik.com/api';
+const API_BASES=['https://warshatik-store2.hussainfiras23.workers.dev/api','https://warshatik.com/api'];
+const ADMIN_API=API_BASES[0];
 const api=()=>ADMIN_API;
 const currentAdminKey=()=>String(document.querySelector('#adminKey')?.value||settings.adminKey||'').trim();
 function badge(s){return'badge '+(s||'normal')}function label(x){return x.statusText||STATUS_TEXT[x.status]||'عادي'}
@@ -13,7 +14,7 @@ async function apiCall(path,opt={}){
   const headers={...(opt.headers||{})};if(opt.body&&!(opt.body instanceof FormData)&&!headers['content-type'])headers['content-type']='application/json';
   const key=currentAdminKey();if(key)headers['x-admin-key']=key;
   const primary=ADMIN_API;
-  const bases=[primary];
+  const bases=[...API_BASES];
   let lastErr=null;
   for(const base of bases){
     const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
@@ -35,7 +36,20 @@ async function apiCall(path,opt={}){
   if(lastErr?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
   throw new Error(lastErr?.message||'فشل الاتصال بالخادم');
 }
-async function uploadAsset(file,kind){const key=currentAdminKey();if(!key)throw new Error('تحقق من Admin API Key في الإعدادات');const itemId=editing||'draft';const headers={'content-type':file.type||'application/octet-stream','x-admin-key':key,'x-file-name':encodeURIComponent(file.name),'x-file-kind':kind,'x-item-id':itemId};const r=await fetch(api()+'/uploads',{method:'POST',headers,body:file});let data={};try{data=await r.json()}catch{}if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data}
+async function uploadAsset(file,kind){
+  const key=currentAdminKey();if(!key)throw new Error('تحقق من Admin API Key في الإعدادات');
+  const itemId=editing||'draft',headers={'content-type':file.type||'application/octet-stream','x-admin-key':key,'x-file-name':encodeURIComponent(file.name),'x-file-kind':kind,'x-item-id':itemId};
+  let lastErr=null;
+  for(const base of API_BASES){
+    try{
+      const r=await fetch(base+'/uploads',{method:'POST',headers,body:file});
+      let data={};try{data=await r.json()}catch{}
+      if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+      return data;
+    }catch(e){lastErr=e}
+  }
+  throw new Error(lastErr?.message||'فشل رفع الملف');
+}
 async function deleteAsset(key){if(!key)return;await apiCall('/uploads?key='+encodeURIComponent(key),{method:'DELETE'})}
 async function loadCatalog(){try{const d=await apiCall('/catalog',{method:'GET'});products=d.products||[];courses=d.courses||[];allItems=d.items||[...products,...courses];render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}))}catch(e){console.error(e);toast('تعذر الاتصال بقاعدة البيانات - تحقق من رابط API')}}
 function rows(list){const sales=window.adminSalesMap||{};return list.map(x=>`<tr><td><strong>${x.title}</strong><br><small>${x.category}</small></td><td>${Number(x.price_iqd).toLocaleString()}</td><td>${x.price_usd}</td><td><span class="${badge(x.status)}">${label(x)}</span></td><td><strong>${Number(sales[x.id]||0).toLocaleString('en-US')}</strong></td><td><button class="mini" onclick="editItem('${x.type}','${x.id}')">تعديل</button> <button class="mini" onclick="delItem('${x.type}','${x.id}')">حذف</button></td></tr>`).join('')}
