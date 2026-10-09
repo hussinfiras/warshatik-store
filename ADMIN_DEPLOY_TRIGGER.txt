@@ -1,1 +1,1 @@
-Trigger admin deployment for exchange-rate price conversion.
+Trigger admin deployment for Wayl health diagnostics.
