@@ -1,1 +1,1 @@
-Trigger deployment for automatic regional currency, hidden coming-soon prices, and refreshed pricing assets.
+Trigger deployment for automatic regional currency, hidden coming-soon prices, and admin exchange-rate conversion.
