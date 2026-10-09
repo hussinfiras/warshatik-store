@@ -14,7 +14,19 @@ function saveStorefrontCache(data){try{localStorage.setItem(STOREFRONT_CACHE_KEY
 const cachedStorefront=readStorefrontCache();
 window.storefrontReady=Promise.resolve(cachedStorefront||STOREFRONT_FALLBACK);
 window.storefrontRefresh=(async()=>{try{const r=await fetch('/api/storefront?fresh=1',{cache:'no-store'});if(r.ok){const fresh=await r.json();saveStorefrontCache(fresh);window.applyStoreVisibility?.(fresh);window.dispatchEvent(new CustomEvent('warsha:storefront-updated',{detail:fresh}));return fresh}}catch(e){console.warn('Storefront settings unavailable',e)}return cachedStorefront||STOREFRONT_FALLBACK})();
-window.regionReady=(async()=>{try{const r=await fetch('/api/region',{cache:'no-store'});if(r.ok)return await r.json()}catch(e){console.warn('Region detection unavailable',e)}return {country:'XX',is_iraq:false}})();
+let AUTO_CURRENCY=sessionStorage.getItem('warsha-auto-currency')||'IQD';
+window.regionReady=(async()=>{
+  try{
+    const r=await fetch('/api/region',{cache:'no-store'});
+    if(r.ok){
+      const data=await r.json(),next=data.is_iraq?'IQD':'USD';
+      AUTO_CURRENCY=next;sessionStorage.setItem('warsha-auto-currency',next);
+      window.dispatchEvent(new CustomEvent('warsha:currency-ready',{detail:{currency:next,region:data}}));
+      return data;
+    }
+  }catch(e){console.warn('Region detection unavailable',e)}
+  return {country:'XX',is_iraq:AUTO_CURRENCY==='IQD'}
+})();
 
 
 const WARSHA_LOGO_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 250 720 500" role="img" aria-label="WarshaTik">
@@ -85,7 +97,7 @@ function setupWarshaLoader(){
 window.showWarshaLoader=()=>{const old=document.querySelector('.wt-brand-loader');if(old)return old;const overlay=document.createElement('div');overlay.className='wt-brand-loader wt-inline-wait';overlay.innerHTML=`<div class="wt-loader-inner">${animatedWarshaMark()}</div>`;document.body.appendChild(overlay);armWarshaTick(overlay);return overlay};
 window.hideWarshaLoader=()=>{const overlay=document.querySelector('.wt-brand-loader');if(overlay){overlay.classList.add('done');setTimeout(()=>overlay.remove(),380)}};
 
-const currency=()=>localStorage.getItem('warsha-currency')||'IQD';
+const currency=()=>AUTO_CURRENCY;window.currency=currency;
 function money(i,old=false){const usd=currency()==='USD',n=usd?(old?i.old_price_usd:i.price_usd):(old?i.old_price_iqd:i.price_iqd);if(n==null)return'';return usd?`$${Number(n).toFixed(n%1?2:0)}`:`${Number(n).toLocaleString('en-US')} د.ع`}
 function statusClass(s){return`flag flag-${s||'normal'}`}
 function imageUrl(x){if(!x)return'';return typeof x==='string'?x:(x.url||'')}
@@ -218,6 +230,7 @@ function setupHomeCatalogSections(){
   Promise.all([window.catalogReady,window.storefrontReady]).then(()=>renderHomeCatalogSections());
   window.catalogRefresh?.then(()=>renderHomeCatalogSections());
   window.storefrontRefresh?.then(()=>renderHomeCatalogSections());
+  window.addEventListener('warsha:currency-ready',renderHomeCatalogSections,{once:true});
 }
 function setupAmbientElectronics(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
@@ -236,9 +249,9 @@ function setupAmbientElectronics(){
   }
 }
 
-function setup(){applyWarshaLogo();setupWarshaLoader();setupHomeQuickCards();setupHomeCatalogSections();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb){cb.textContent=currency();cb.onclick=()=>{localStorage.setItem('warsha-currency',currency()==='IQD'?'USD':'IQD');location.reload()}}const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
+function setup(){applyWarshaLogo();setupWarshaLoader();setupHomeQuickCards();setupHomeCatalogSections();setupAmbientElectronics();const page=document.body.dataset.page;$$('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));const mb=$('#menuButton'),nav=$('#navLinks');if(mb)mb.onclick=()=>nav.classList.toggle('open');if(nav)nav.querySelectorAll('a').forEach(a=>a.onclick=()=>nav.classList.remove('open'));const cb=$('#currencyToggle');if(cb)cb.remove()const actions=$('.nav-actions');if(actions&&!actions.querySelector('.cart-nav'))actions.insertAdjacentHTML('afterbegin',`<a class="currency-btn cart-nav" href="cart.html" aria-label="السلة">🛒<span class="cart-count" data-cart-count></span></a>`);updateCartCount();reveal()}
 function reveal(){const els=$('.reveal:not(.visible)');if(!els.length)return;if(!('IntersectionObserver' in window)||matchMedia('(pointer:coarse)').matches||innerWidth<700){els.forEach(x=>x.classList.add('visible'));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');o.unobserve(e.target)}}),{threshold:.05});els.forEach(x=>o.observe(x))}window.reveal=reveal;
-function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.status==='sale'&&i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong class="${i.status==='sale'?'sale-current-price':''}">${i.status==='free'?'<span class="free-price"><b>مجاني</b></span>':money(i)}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
+function card(i){const disabled=['sold','coming'].includes(i.status),main=imageUrl(i.images?.[0]);return`<article class="product-card reveal" onclick="location.href='product.html?id=${encodeURIComponent(i.id)}&type=${i.type}'"><div class="product-media">${i.statusText?`<span class="${statusClass(i.status)}">${i.statusText}</span>`:''}${main?`<img class="product-main-image" src="${main}" alt="${i.title}">`:`<div class="electronics-art"><span class="chip">${i.category.toUpperCase()}</span><i class="wire w1"></i><i class="wire w2"></i><i class="wire w3"></i></div>`}</div><div class="product-body"><span class="category">${i.category}</span><h3>${i.title}</h3><p>${i.short}</p><div class="price-row"><div>${i.status==='sale'&&i.old_price_iqd?`<small class="old-price">${money(i,true)}</small>`:''}<strong class="${i.status==='sale'?'sale-current-price':''}">${i.status==='coming'?'':(i.status==='free'?'<span class="free-price"><b>مجاني</b></span>':money(i))}</strong></div><span class="view-btn">${disabled?'عرض التفاصيل':'التفاصيل ←'}</span></div></div></article>`}
 async function renderListing(type,target,searchSelector){
   await window.catalogReady;await window.storefrontReady;
   if((type==='course'&&!window.storeVisibility.show_courses)||(type==='product'&&!window.storeVisibility.show_products)){location.replace('index.html');return}
@@ -252,5 +265,6 @@ async function renderListing(type,target,searchSelector){
   paint();
   if(searchSelector){const input=document.querySelector(searchSelector);if(input)input.addEventListener('input',paint)}
   window.catalogRefresh?.then(()=>paint());
+  window.addEventListener('warsha:currency-ready',paint,{once:true});
 }
 document.addEventListener('DOMContentLoaded',setup);
