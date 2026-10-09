@@ -1,1 +1,1 @@
-Deploy checkout fix: show real server errors and remove cross-origin fallback masking failed orders.
+Deploy checkout order-creation D1 initialization and structured 500 error handling.
