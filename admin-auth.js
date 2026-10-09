@@ -1,5 +1,5 @@
 (()=>{
-const API_BASES=['https://warshatik.com/api','https://warshatik-store2.hussainfiras23.workers.dev/api'];
+const API_BASES=['https://warshatik.com/api','https://warshatik.com/api'];
 const API=API_BASES[0];
 const $=s=>document.querySelector(s);
 const login=$('#adminLogin'),emailStep=$('#adminLoginEmailStep'),codeStep=$('#adminLoginCodeStep');
@@ -68,14 +68,14 @@ async function startAdmin(){
   if(login)login.hidden=true;
   document.body.classList.remove('admin-auth-pending');
   const scripts=[
-    'app.js?v=20261009h',
-    'domain-migrate.js?v=20261009h',
-    'store-tools.js?v=20261009h',
-    'section-manager.js?v=20261009h',
-    'consultation-admin.js?v=20261009h',
-    'admin-ui-guard.js?v=20261009h',
-    'customer-admin.js?v=20261009h',
-    'test-order.js?v=20261009h'
+    'app.js?v=20261009j',
+    'domain-migrate.js?v=20261009j',
+    'store-tools.js?v=20261009j',
+    'section-manager.js?v=20261009j',
+    'consultation-admin.js?v=20261009j',
+    'admin-ui-guard.js?v=20261009j',
+    'customer-admin.js?v=20261009j',
+    'test-order.js?v=20261009j'
   ];
   try{
     for(const src of scripts)await loadScript(src);
