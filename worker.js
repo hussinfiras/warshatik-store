@@ -510,8 +510,8 @@ export default{async fetch(req,env,ctx){
       if(it.type==='course'&&vis.show_courses===false)continue;
       if(it.type==='product'&&vis.show_products===false)continue;
       const custom=sections.find(s=>s&&s.type===it.type);if(custom&&custom.visible===false)continue;if(String(it.type||'').startsWith('section:')&&!custom)continue;
-      if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);
       const resolvedPackage=it.package_enabled?(packageType||'software'):null;
+      if(it.package_enabled&&resolvedPackage==='hardware'&&it.iraq_only&&req.cf?.country!=='IQ')return json({error:'باقة الهاردوير متاحة للشراء داخل العراق فقط.'},403);
       if((!it.package_enabled&&it.digital_only)||resolvedPackage==='software'){if(safeParse(it.files).filter(f=>f?.key).length===0)return json({error:'هذا المنتج الرقمي غير جاهز للشراء حالياً لعدم توفر ملف التحميل.'},409);}
       let price=0;if(it.status!=='free'){if(resolvedPackage==='software')price=currency==='USD'?Number(it.software_price_usd??it.price_usd):Number(it.software_price_iqd??it.price_iqd);else if(resolvedPackage==='hardware')price=currency==='USD'?Number(it.hardware_price_usd??it.price_usd):Number(it.hardware_price_iqd??it.price_iqd);else price=currency==='USD'?Number(it.price_usd):Number(it.price_iqd)}
       total+=price;selected.push({...it,price,packageType:resolvedPackage});
