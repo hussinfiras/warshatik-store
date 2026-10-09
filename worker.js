@@ -155,6 +155,7 @@ export default{async fetch(req,env){
       digital_warning_default:s.digital_warning_default||'تنبيه: هذا منتج رقمي فقط ولا يتضمن حزمة قطع أو مكونات هاردوير كاملة.',
       home_card_images:s.home_card_images||{},
       consultation_prices:s.consultation_prices||{individual:{iqd:20000,usd:15},supervision:{iqd:100000,usd:75}},
+      exchange_rate_iqd_per_usd:Number(s.exchange_rate_iqd_per_usd||1500),
       show_courses:s.show_courses!==false,
       show_products:s.show_products!==false,
       show_consultations:s.show_consultations!==false,
@@ -246,7 +247,7 @@ export default{async fetch(req,env){
     const expectedAdminKey=String(env.ADMIN_KEY||'').trim();const providedAdminKey=String(b.admin_key||'').trim();if(!expectedAdminKey||providedAdminKey!==expectedAdminKey)return json({error:'Unauthorized'},401);
     if(b.action==='get-settings')return json({settings:await getSettings(env.DB)});
     if(b.action==='save-settings'){
-      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices'];
+      const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices','exchange_rate_iqd_per_usd'];
       const clean={};for(const k of allowed)if(k in (b.payload||{}))clean[k]=b.payload[k];
       await putSettings(env.DB,clean);await clearStoreCaches(origin);
       return json({ok:true,settings:await getSettings(env.DB)});
@@ -327,7 +328,7 @@ export default{async fetch(req,env){
 
   if(u.pathname==='/api/admin/settings'&&req.method==='POST'){
     const b=await req.json();
-    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices'];
+    const allowed=['home_title','home_subtitle','home_image','news_enabled','news_items','home_banners','digital_warning_default','wayl_fee_percent','wayl_fixed_iqd','wayl_fixed_usd','show_courses','show_products','show_consultations','sections','home_card_images','consultation_prices','exchange_rate_iqd_per_usd'];
     const clean={};for(const k of allowed)if(k in b)clean[k]=b[k];
     await putSettings(env.DB,clean);await clearStoreCaches(origin);
     return json({ok:true,settings:await getSettings(env.DB)});
