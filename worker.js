@@ -17,6 +17,13 @@ async function init(db){
   try{await db.exec(`ALTER TABLE items ADD COLUMN digital_only INTEGER NOT NULL DEFAULT 1`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN iraq_only INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE items ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN package_enabled INTEGER NOT NULL DEFAULT 0`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN software_price_iqd REAL`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN software_price_usd REAL`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN hardware_price_iqd REAL`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN hardware_price_usd REAL`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN software_features TEXT NOT NULL DEFAULT '[]'`)}catch{}
+  try{await db.exec(`ALTER TABLE items ADD COLUMN hardware_features TEXT NOT NULL DEFAULT '[]'`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS consultation_tickets(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,customer_name TEXT NOT NULL,contact_method TEXT NOT NULL,contact_value TEXT,scheduled_date TEXT NOT NULL,consultation_type TEXT NOT NULL,amount_iqd REAL NOT NULL,status TEXT NOT NULL DEFAULT 'issued',payment_reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TEXT);`);
   try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN amount_usd REAL NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE consultation_tickets ADD COLUMN wayl_link_id TEXT`)}catch{}
@@ -31,6 +38,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_sent INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_last_error TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
+  try{await db.exec(`ALTER TABLE order_items ADD COLUMN package_type TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes(id TEXT PRIMARY KEY,email TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at INTEGER NOT NULL,used_at INTEGER,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS download_tokens(token_hash TEXT PRIMARY KEY,order_id TEXT NOT NULL,item_id TEXT NOT NULL,file_key TEXT NOT NULL,file_name TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL);`);
   await db.exec(`CREATE TABLE IF NOT EXISTS store_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
@@ -45,7 +53,7 @@ function ensureInit(db){if(!initPromise)initPromise=init(db).catch(e=>{initPromi
 const cors={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-admin-key,x-file-name,x-file-kind,x-item-id','access-control-allow-methods':'GET,POST,DELETE,OPTIONS'};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=UTF-8',...cors,...extra}});
 function safeParse(v,fallback=[]){try{return JSON.parse(v||'[]')}catch{return fallback}}
-function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,keywords:safeParse(r.keywords),features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
+function row(r){return {...r,statusText:r.status_text,warningText:r.warning_text||'',digitalOnly:!!r.digital_only,iraqOnly:!!r.iraq_only,packageEnabled:!!r.package_enabled,software_price_iqd:r.software_price_iqd,software_price_usd:r.software_price_usd,hardware_price_iqd:r.hardware_price_iqd,hardware_price_usd:r.hardware_price_usd,softwareFeatures:safeParse(r.software_features),hardwareFeatures:safeParse(r.hardware_features),keywords:safeParse(r.keywords),features:safeParse(r.features),images:safeParse(r.images),files:safeParse(r.files),active:!!r.active,old_iqd:r.old_price_iqd,old_usd:r.old_price_usd};}
 async function getSettings(db){const {results}=await db.prepare('SELECT key,value FROM store_settings').all();const out={};for(const r of results||[]){try{out[r.key]=JSON.parse(r.value)}catch{out[r.key]=r.value}}return out}
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
 async function isAdminCredential(provided,env,db){
@@ -198,7 +206,7 @@ async function fastRecoveryVerify(req,env,origin){
   const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);
   const rec=await env.DB.prepare('SELECT id FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();
   if(!rec)return json({error:'Invalid or expired code'},400);
-  const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();
+  const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,oi.package_type,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();
   const exp=now+60*60*1000,items=[],statements=[env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id)];
   for(const it of results||[]){
     const files=safeParse(it.files),downloads=[];
@@ -293,7 +301,7 @@ async function finalizeWaylConsultation(env,db,code,waylData){
 async function sendPurchaseEmail(env,db,orderId,origin){
   const order=await db.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();if(!order||order.payment_status!=='paid')return {sent:false};
   const {results}=await db.prepare('SELECT * FROM order_items WHERE order_id=?').bind(orderId).all();let blocks='';
-  for(const it of results){const links=await makeDownloadLinks(env,db,orderId,it.item_id,origin);blocks+=`<h3>${it.title}</h3>${links.length?links.map(l=>`<p><a href="${l.url}">تحميل ${l.name}</a> <small>(الرابط صالح لمدة ساعة)</small></p>`).join(''):'<p>سيتم توفير الملف قريباً.</p>'}`;}
+  for(const it of results){if(it.package_type==='hardware'){blocks+=`<h3>${it.title}</h3><p>تم تسجيل طلب الهاردوير. سيتم التواصل معك بخصوص التجهيز أو التسليم.</p>`;continue}const links=await makeDownloadLinks(env,db,orderId,it.item_id,origin);blocks+=`<h3>${it.title}</h3>${links.length?links.map(l=>`<p><a href="${l.url}">تحميل ${l.name}</a> <small>(الرابط صالح لمدة ساعة)</small></p>`).join(''):'<p>سيتم توفير الملف قريباً.</p>'}`;}
   const recover=`${origin}/recover.html`;
   const free=Number(order.total||0)===0;
   const mail=await sendEmail(env,order.email,free?'تحميل منتجك المجاني - ورشة تك':'مشترياتك من ورشة تك',`<div dir="rtl" style="font-family:Arial,sans-serif"><h2>${free?'منتجك المجاني جاهز للتحميل':'شكراً لشرائك من ورشة تك'}</h2><p>رقم الطلب: <b>${order.id}</b></p>${blocks}<hr><p>حقك في المنتجات لا ينتهي. إذا انتهى رابط التحميل، استخدم صفحة استرجاع المشتريات لإصدار روابط جديدة:</p><p><a href="${recover}">استرجاع مشترياتي</a></p></div>`);
@@ -392,25 +400,27 @@ export default{async fetch(req,env,ctx){
     const b=await req.json(),name=String(b.name||'').trim(),email=normEmail(b.email),currency=(req.cf?.country==='IQ'?'IQD':'USD');if(name.length<2)return json({error:'Name is required'},400);if(!validEmail(email))return json({error:'Invalid email'},400);
     const ids=[...new Set(Array.isArray(b.items)?b.items.map(String):[])];if(!ids.length)return json({error:'Cart is empty'},400);
     const vis=await getSettings(env.DB),sections=Array.isArray(vis.sections)?vis.sections:[];let total=0,selected=[];
-    for(const id of ids){
-      const it=await env.DB.prepare('SELECT id,type,title,price_iqd,price_usd,status,active,iraq_only,digital_only,files FROM items WHERE id=?').bind(id).first();
+    for(const entry of ids){
+      const [id,rawPackage]=entry.split('::'),packageType=['software','hardware'].includes(rawPackage)?rawPackage:null;
+      const it=await env.DB.prepare('SELECT id,type,title,price_iqd,price_usd,status,active,iraq_only,digital_only,files,package_enabled,software_price_iqd,software_price_usd,hardware_price_iqd,hardware_price_usd FROM items WHERE id=?').bind(id).first();
       if(!it||!it.active||['sold','coming'].includes(it.status))continue;
       if(it.type==='course'&&vis.show_courses===false)continue;
       if(it.type==='product'&&vis.show_products===false)continue;
       const custom=sections.find(s=>s&&s.type===it.type);if(custom&&custom.visible===false)continue;if(String(it.type||'').startsWith('section:')&&!custom)continue;
       if(it.iraq_only&&req.cf?.country!=='IQ')return json({error:'هذا المنتج متاح للشراء داخل العراق فقط.'},403);
-      if(it.digital_only&&safeParse(it.files).filter(f=>f?.key).length===0)return json({error:'هذا المنتج الرقمي غير جاهز للشراء حالياً لعدم توفر ملف التحميل.'},409);
-      const price=it.status==='free'?0:(currency==='USD'?Number(it.price_usd):Number(it.price_iqd));
-      total+=price;selected.push({...it,price});
+      const resolvedPackage=it.package_enabled?(packageType||'software'):null;
+      if((!it.package_enabled&&it.digital_only)||resolvedPackage==='software'){if(safeParse(it.files).filter(f=>f?.key).length===0)return json({error:'هذا المنتج الرقمي غير جاهز للشراء حالياً لعدم توفر ملف التحميل.'},409);}
+      let price=0;if(it.status!=='free'){if(resolvedPackage==='software')price=currency==='USD'?Number(it.software_price_usd??it.price_usd):Number(it.software_price_iqd??it.price_iqd);else if(resolvedPackage==='hardware')price=currency==='USD'?Number(it.hardware_price_usd??it.price_usd):Number(it.hardware_price_iqd??it.price_iqd);else price=currency==='USD'?Number(it.price_usd):Number(it.price_iqd)}
+      total+=price;selected.push({...it,price,packageType:resolvedPackage});
     }
     if(!selected.length)return json({error:'No purchasable items'},400);
     const orderId='WT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
     const freeOrder=total===0;
     await env.DB.prepare("INSERT INTO orders(id,email,customer_name,currency,total,payment_status,payment_reference,paid_at) VALUES(?,?,?,?,?,?,?,?)").bind(orderId,email,name,currency,total,freeOrder?'paid':'pending',freeOrder?'FREE':null,freeOrder?new Date().toISOString():null).run();
-    for(const it of selected)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price) VALUES(?,?,?,?)').bind(orderId,it.id,it.title,it.price).run();
+    for(const it of selected){const label=it.packageType==='software'?'سوفت وير':it.packageType==='hardware'?'هاردوير':'';await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price,package_type) VALUES(?,?,?,?,?)').bind(orderId,it.id,label?it.title+' — '+label:it.title,it.price,it.packageType||null).run();}
     let mail={sent:false},downloads=[];if(freeOrder){
       mail=await sendPurchaseEmail(env,env.DB,orderId,origin);
-      for(const it of selected){const links=await makeDownloadLinks(env,env.DB,orderId,it.id,origin);downloads.push(...links.map(l=>({item_id:it.id,item_title:it.title,name:l.name,url:l.url})))}
+      for(const it of selected){if(it.packageType==='hardware')continue;const links=await makeDownloadLinks(env,env.DB,orderId,it.id,origin);downloads.push(...links.map(l=>({item_id:it.id,item_title:it.title,name:l.name,url:l.url})))}
     }
     return json({ok:true,order_id:orderId,email,currency,total,free:freeOrder,email_sent:mail.sent||false,email_reason:mail.reason||null,downloads});
   }
@@ -578,7 +588,12 @@ export default{async fetch(req,env,ctx){
   }
 
   if(u.pathname==='/api/items'&&req.method==='POST'){
-    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,active,sort_order,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`).bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.active===false?0:1,x.sort_order||0).run();await clearStoreCaches(origin);const saved=await env.DB.prepare('SELECT * FROM items WHERE id=?').bind(x.id).first();return json({ok:true,item:row(saved)});
+    const x=await req.json(),st=x.status||'normal',text=x.statusText||STATUS[st]||'عادي';
+    await env.DB.prepare(`INSERT INTO items(id,type,title,category,price_iqd,price_usd,old_price_iqd,old_price_usd,status,status_text,short,description,features,images,files,youtube,warning_text,digital_only,iraq_only,keywords,package_enabled,software_price_iqd,software_price_usd,hardware_price_iqd,hardware_price_usd,software_features,hardware_features,active,sort_order,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,category=excluded.category,price_iqd=excluded.price_iqd,price_usd=excluded.price_usd,old_price_iqd=excluded.old_price_iqd,old_price_usd=excluded.old_price_usd,status=excluded.status,status_text=excluded.status_text,short=excluded.short,description=excluded.description,features=excluded.features,images=excluded.images,files=excluded.files,youtube=excluded.youtube,warning_text=excluded.warning_text,digital_only=excluded.digital_only,iraq_only=excluded.iraq_only,keywords=excluded.keywords,package_enabled=excluded.package_enabled,software_price_iqd=excluded.software_price_iqd,software_price_usd=excluded.software_price_usd,hardware_price_iqd=excluded.hardware_price_iqd,hardware_price_usd=excluded.hardware_price_usd,software_features=excluded.software_features,hardware_features=excluded.hardware_features,active=excluded.active,sort_order=excluded.sort_order,updated_at=CURRENT_TIMESTAMP`)
+    .bind(x.id,x.type,x.title,x.category||'',+x.price_iqd||0,+x.price_usd||0,x.old_iqd??x.old_price_iqd??null,x.old_usd??x.old_price_usd??null,st,text,x.short||'',x.description||'',JSON.stringify(x.features||[]),JSON.stringify(x.images||[]),JSON.stringify(x.files||[]),x.youtube||'',x.warningText||x.warning_text||'',x.digitalOnly===false?0:1,x.iraqOnly?1:0,JSON.stringify(x.keywords||[]),x.packageEnabled?1:0,x.software_price_iqd??null,x.software_price_usd??null,x.hardware_price_iqd??null,x.hardware_price_usd??null,JSON.stringify(x.softwareFeatures||[]),JSON.stringify(x.hardwareFeatures||[]),x.active===false?0:1,x.sort_order||0).run();
+    await clearStoreCaches(origin);const saved=await env.DB.prepare('SELECT * FROM items WHERE id=?').bind(x.id).first();return json({ok:true,item:row(saved)});
   }
 
   if(u.pathname.startsWith('/api/items/')&&req.method==='DELETE'){
