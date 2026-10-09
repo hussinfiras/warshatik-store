@@ -1,1 +1,1 @@
-Trigger deployment for software/hardware package selection, package pricing, package features, cart, checkout, and delivery behavior.
+Trigger deployment for final product page stability, Wayl return verification, and recovery timeout fixes.
