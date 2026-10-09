@@ -4,7 +4,7 @@ let products=[],courses=[],allItems=[],editing=null,currentImages=[],currentFile
 function readLocalJson(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch(e){console.warn('Bad local storage:',key,e);return null}}
 let consultations=readLocalJson('wt_consults')||{c1:{price:20000,desc:'مكالمة فيديو لمدة ساعة.'},c2:{price:100000,desc:'متابعة شهرية + 4 مكالمات.'}};
 let settings=readLocalJson('wt_settings')||{storeName:'ورشة تك | warshaTik',telegram:'https://t.me/HW2DMbot',whatsapp:'+964 786 741 9185',currency:'IQD',apiBase:'https://warshatik.com/api',adminKey:''};
-const API_BASES=['https://warshatik-store2.hussainfiras23.workers.dev/api','https://warshatik.com/api'];
+const API_BASES=['https://warshatik.com/api','https://warshatik-store2.hussainfiras23.workers.dev/api'];
 const ADMIN_API=API_BASES[0];
 const api=()=>ADMIN_API;
 const currentAdminKey=()=>String(document.querySelector('#adminKey')?.value||settings.adminKey||'').trim();
@@ -17,7 +17,7 @@ async function apiCall(path,opt={}){
   const bases=[...API_BASES];
   let lastErr=null;
   for(const base of bases){
-    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),8000);
     try{
       const r=await fetch(base+path,{...opt,headers,signal:ctrl.signal});
       let data={};try{data=await r.json()}catch{}
