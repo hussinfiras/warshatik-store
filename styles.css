@@ -634,3 +634,11 @@ body[data-page="home"] .fallback-hero.with-news p{
 .package-option.active{background:#8055c2;color:#fff;border-color:#8055c2;box-shadow:0 8px 20px rgba(128,85,194,.18)}
 .package-chip{display:inline-flex;align-items:center;width:max-content;padding:4px 9px;border-radius:999px;background:#f0e7fb;color:#8055c2;font-size:12px;font-weight:800;margin:2px 0 6px}
 @media(max-width:600px){.package-choice{grid-template-columns:1fr 1fr}.package-option{padding:11px 8px;font-size:14px}}
+
+/* Package pricing and cart badge polish */
+.package-price-software,.detail-price.package-price-software strong{color:#17945f!important}
+.package-price-hardware,.detail-price.package-price-hardware strong{color:#2777d7!important}
+.cart-nav{display:inline-flex!important;align-items:center;justify-content:center}
+.cart-count{top:-5px!important;left:-5px!important;display:none;align-items:center;justify-content:center;line-height:1!important}
+#cartMessage{min-height:24px}
+#cartMessage a{color:#8055c2;font-weight:900;text-decoration:underline}
