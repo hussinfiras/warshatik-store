@@ -195,7 +195,9 @@ $('#form').onsubmit=async e=>{
     youtube:$('#youtube').value,images:currentImages,files:currentFiles,active:$('#active').checked
   };
   try{
-    const d=await apiCall('/items',{method:'POST',body:JSON.stringify(x)});
+    const d=window.adminBridge
+      ? await window.adminBridge('save-item',x)
+      : await apiCall('/items',{method:'POST',body:JSON.stringify(x)});
     const saved=d.item||x;
     const i=allItems.findIndex(v=>v.id===saved.id);
     if(i>=0)allItems[i]=saved;else allItems.push(saved);
@@ -203,7 +205,10 @@ $('#form').onsubmit=async e=>{
     courses=allItems.filter(v=>v.type==='course');
     render();window.dispatchEvent(new CustomEvent('warsha:admin-catalog',{detail:allItems}));
     close();toast('تم حفظ التغيير في المتجر');
-  }catch(err){alert(err.message==='Unauthorized'?'تحقق من Admin API Key في الإعدادات':err.message)}
+  }catch(err){
+    const msg=err?.message||'تعذر حفظ المنتج';
+    alert(msg==='Unauthorized'?'انتهت جلسة الإدارة. سجّل الدخول مرة أخرى.':msg);
+  }
 };
 
 $$('.nav').forEach(b=>b.onclick=()=>{
