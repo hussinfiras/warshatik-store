@@ -47,10 +47,7 @@ async function getSettings(db){const {results}=await db.prepare('SELECT key,valu
 async function putSettings(db,obj){for(const [key,value] of Object.entries(obj||{})){await db.prepare(`INSERT INTO store_settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP`).bind(key,JSON.stringify(value)).run();}}
 async function isAdminCredential(provided,env,db){
   const value=String(provided||'').trim();
-  if(!value)return false;
-  const expected=String(env.ADMIN_KEY||'').trim();
-  if(expected&&value===expected)return true;
-  if(!value.startsWith('wta_'))return false;
+  if(!value||!value.startsWith('wta_'))return false;
   const h=await hashText(value),now=Date.now();
   const s=await db.prepare('SELECT 1 ok FROM admin_sessions WHERE token_hash=? AND expires_at>?').bind(h,now).first();
   return !!s;
@@ -536,7 +533,7 @@ export default{async fetch(req,env){
     if(b.action==='health'){
       let db_ok=false,r2_ok=!!env.MEDIA;
       try{await env.DB.prepare('SELECT 1 x').first();db_ok=true}catch{}
-      return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},wayl:{token:!!env.WAYL_API_TOKEN,webhook_secret:!!env.WAYL_WEBHOOK_SECRET,env:waylEnv(env)},admin_email:!!env.ADMIN_EMAIL,admin_key:!!env.ADMIN_KEY});
+      return json({ok:true,db:db_ok,r2:r2_ok,email:{resend_key:!!env.RESEND_API_KEY,from:!!env.EMAIL_FROM,from_value:env.EMAIL_FROM||''},wayl:{token:!!env.WAYL_API_TOKEN,webhook_secret:!!env.WAYL_WEBHOOK_SECRET,env:waylEnv(env)},admin_auth:{email:!!env.ADMIN_EMAIL,password:!!env.ADMIN_PASSWORD}});
     }
     if(b.action==='stats'){
       const s=await getSettings(env.DB),resetAt=s.stats_reset_at||'1970-01-01T00:00:00Z';
