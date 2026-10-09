@@ -55,8 +55,9 @@ q('#validateConsultTicket')?.addEventListener('click',async()=>{
       try{
         const pr=await fetch('/api/consultations/payment-start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code})});
         const pd=await pr.json();if(!pr.ok)throw new Error(pd.error||'تعذر بدء الدفع');
-        if(pd.paid){location.reload();return}
-        paymentBox.insertAdjacentHTML('beforeend','<div class="ticket-payment-note">'+pd.message+'</div>');
+        if(pd.paid){location.href='consultations.html?wayl_consult='+encodeURIComponent(code);return}
+        if(pd.url){location.href=pd.url;return}
+        paymentBox.insertAdjacentHTML('beforeend','<div class="ticket-payment-note">تعذر استلام رابط الدفع من Wayl.</div>');
       }catch(e){paymentBox.insertAdjacentHTML('beforeend','<div class="ticket-error">'+e.message+'</div>')}
       finally{payBtn.disabled=false}
     });
@@ -64,4 +65,6 @@ q('#validateConsultTicket')?.addEventListener('click',async()=>{
   finally{btn.disabled=false}
 });
 input?.addEventListener('input',()=>{input.value=input.value.replace(/\D/g,'').slice(0,10)});
+async function handleWaylConsultReturn(){const code=new URLSearchParams(location.search).get('wayl_consult');if(!code)return;modal.hidden=false;setStep(3);paymentBox.innerHTML='<div class="ticket-valid"><strong>جاري التحقق من الدفع...</strong></div>';try{const r=await fetch('/api/consultations/payment-status?code='+encodeURIComponent(code),{cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'تعذر التحقق من الدفع');if(d.paid){const t=d.ticket||{};paymentBox.innerHTML=`<div class="ticket-receipt"><strong>تم الدفع بنجاح ✓</strong><p><b>الاسم:</b> ${t.customer_name||''}</p><p><b>رمز التذكرة:</b> ${code}</p><p><b>المبلغ:</b> ${ticketMoney(t)}</p><p>سيتم التواصل معك لتأكيد تفاصيل الاستشارة.</p></div>`}else{paymentBox.innerHTML=`<div class="ticket-valid"><strong>الدفع لم يكتمل بعد</strong><p>حالة Wayl: ${d.wayl_status||d.status||'قيد المعالجة'}</p><button class="btn btn-primary" onclick="location.reload()">تحقق مرة أخرى</button></div>`}}catch(e){paymentBox.innerHTML='<div class="ticket-error">'+e.message+'</div>'}}
+handleWaylConsultReturn();
 })();
