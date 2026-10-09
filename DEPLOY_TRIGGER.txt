@@ -1,1 +1,1 @@
-Deploy cached Wayl payment resume URLs, pending status fallback, and reliable new checkout navigation.
+Deploy Wayl successful-return order-reference fallback and secure purchase-recovery message.
