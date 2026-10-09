@@ -1,1 +1,1 @@
-Trigger deployment for checkout fetch error handling and Wayl payment route initialization.
+Trigger deployment for checkout API fallback and stable Worker-origin catalog/storefront requests.
