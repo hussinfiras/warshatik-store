@@ -114,3 +114,9 @@
   }
   main{padding-top:14px!important}
 }
+
+.package-editor{border:1px solid #e6dcef;border-radius:16px;padding:14px;background:#fbf9fd}
+.package-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.package-admin-card{border:1px solid #e5ddec;background:#fff;border-radius:14px;padding:14px}
+.package-admin-card h3{margin:0 0 12px;color:#8055c2}
+@media(max-width:850px){.package-admin-grid{grid-template-columns:1fr}}
