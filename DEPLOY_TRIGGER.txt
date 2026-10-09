@@ -1,1 +1,1 @@
-Trigger deployment for admin password plus email OTP security and session-only admin authorization.
+FINAL PRODUCTION DEPLOY: Wayl live mode, server-side regional pricing, robust return verification, digital-file purchase guard, email retry tracking, and storefront stability fixes.
