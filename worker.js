@@ -130,6 +130,7 @@ async function verifyWaylSignature(raw,signature,secret){
   return diff===0;
 }
 async function orderChargeIQD(db,order){
+  if(Number(order.wayl_charge_iqd||0)>0)return Math.round(Number(order.wayl_charge_iqd));
   if(order.currency==='IQD')return Math.round(Number(order.total||0));
   const s=await getSettings(db),rate=Number(s.exchange_rate_iqd_per_usd||1500);
   return Math.round(Number(order.total||0)*rate);
@@ -157,8 +158,9 @@ async function finalizeWaylOrder(env,db,orderId,origin,waylData){
   if(actual!==expected)return {ok:false,error:'Wayl amount mismatch'};
   if(!waylPaidStatus(waylData))return {ok:true,paid:false,status:waylData?.status||'Unknown'};
   if(order.payment_status==='paid')return {ok:true,paid:true,already_paid:true};
-  await db.prepare("UPDATE orders SET payment_status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP,wayl_link_id=COALESCE(wayl_link_id,?),wayl_code=COALESCE(wayl_code,?),wayl_charge_iqd=? WHERE id=?")
+  const write=await db.prepare("UPDATE orders SET payment_status='paid',payment_reference=?,paid_at=CURRENT_TIMESTAMP,wayl_link_id=COALESCE(wayl_link_id,?),wayl_code=COALESCE(wayl_code,?),wayl_charge_iqd=? WHERE id=? AND payment_status<>'paid'")
     .bind(String(waylData.id||waylData.code||'WAYL'),String(waylData.id||''),String(waylData.code||''),actual,orderId).run();
+  if(!Number(write?.meta?.changes||0))return {ok:true,paid:true,already_paid:true};
   const mail=await sendPurchaseEmail(env,db,orderId,origin);
   return {ok:true,paid:true,email_sent:!!mail.sent,email_reason:mail.reason||null};
 }
@@ -244,6 +246,14 @@ export default{async fetch(req,env){
       if(!order)return json({error:'Order not found'},404);
       if(order.payment_status==='paid')return json({ok:true,paid:true});
       if(Number(order.total||0)<=0)return json({error:'Free orders do not use Wayl'},400);
+      if(order.wayl_link_id||order.wayl_code){
+        try{
+          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
+          const out=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
+          if(out.paid)return json({...out,order_id:orderId});
+          if(current?.url)return json({ok:true,paid:false,url:current.url,order_id:orderId,charge_iqd:Number(order.wayl_charge_iqd||0),env:waylEnv(env)});
+        }catch{}
+      }
       const charge=await orderChargeIQD(env.DB,order);
       const link=await createWaylLink(env,{
         referenceId:orderId,total:charge,label:'WarshaTik '+orderId,
@@ -367,6 +377,14 @@ export default{async fetch(req,env){
       if(t.status==='cancelled')return json({error:'هذه التذكرة ملغاة.'},400);
       if(t.status==='ended')return json({error:'انتهت الجلسة، حاول مرة أخرى.'},400);
       const ref='CONS-'+code,amount=Math.round(Number(t.amount_iqd||0));
+      if(t.wayl_link_id||t.wayl_code){
+        try{
+          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
+          const out=await finalizeWaylConsultation(env,env.DB,code,current);
+          if(out.paid)return json({...out,code});
+          if(current?.url)return json({ok:true,paid:false,url:current.url,code,amount_iqd:amount,env:waylEnv(env)});
+        }catch{}
+      }
       const link=await createWaylLink(env,{
         referenceId:ref,total:amount,label:'WarshaTik consultation '+code,
         webhookUrl:origin+'/api/webhooks/wayl',
