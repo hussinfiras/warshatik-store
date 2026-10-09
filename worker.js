@@ -206,7 +206,7 @@ async function fastRecoveryVerify(req,env,origin){
   const b=await req.json(),email=normEmail(b.email),code=String(b.code||'').trim(),now=Date.now(),h=await hashText(code);
   const rec=await env.DB.prepare('SELECT id FROM recovery_codes WHERE email=? AND code_hash=? AND used_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(email,h,now).first();
   if(!rec)return json({error:'Invalid or expired code'},400);
-  const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,oi.package_type,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();
+  const {results}=await env.DB.prepare("SELECT DISTINCT oi.order_id,oi.item_id,oi.title,i.files FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN items i ON i.id=oi.item_id WHERE o.email=? AND o.payment_status='paid' ORDER BY o.paid_at DESC").bind(email).all();
   const exp=now+60*60*1000,items=[],statements=[env.DB.prepare('UPDATE recovery_codes SET used_at=? WHERE id=?').bind(now,rec.id)];
   for(const it of results||[]){
     const files=safeParse(it.files),downloads=[];
@@ -349,6 +349,78 @@ export default{async fetch(req,env,ctx){
   }
 
   if(u.pathname==='/api/region'&&req.method==='GET')return json({country:req.cf?.country||'XX',is_iraq:(req.cf?.country||'XX')==='IQ'},200,{'cache-control':'private, max-age=300'});
+
+  if(u.pathname==='/api/webhooks/wayl'&&req.method==='POST'){
+    await ensureInit(env.DB);
+    const raw=await req.text(),signature=req.headers.get('x-wayl-signature-256')||'';
+    if(!(await verifyWaylSignature(raw,signature,env.WAYL_WEBHOOK_SECRET||'')))return json({error:'Invalid Wayl signature'},401);
+    let event={};try{event=JSON.parse(raw)}catch{return json({error:'Invalid JSON'},400)}
+    const ref=String(event.referenceId||event.reference_id||'').trim();
+    if(!ref)return json({ok:true});
+    try{
+      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
+      if(ref.startsWith('CONS-')){
+        const out=await finalizeWaylConsultation(env,env.DB,ref.slice(5),current);
+        return json(out,out.ok?200:400);
+      }
+      const out=await finalizeWaylOrder(env,env.DB,ref,origin,current);
+      return json(out,out.ok?200:400);
+    }catch(e){return json({error:e.message||'Wayl webhook processing failed'},502)}
+  }
+
+  if(u.pathname==='/api/payments/wayl/start'&&req.method==='POST'){
+    try{
+      if(!waylConfigured(env))return json({error:'Wayl is not configured yet'},503);
+      const b=await req.json(),orderId=String(b.order_id||'').trim();
+      const order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if(!order)return json({error:'Order not found'},404);
+      if(order.payment_status==='paid')return json({ok:true,paid:true,order_id:orderId});
+      if(Number(order.total||0)<=0)return json({error:'Free orders do not use Wayl'},400);
+      const charge=await orderChargeIQD(env.DB,order);
+      if(order.wayl_link_id||order.wayl_code){
+        try{
+          const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(orderId))).data;
+          const done=await finalizeWaylOrder(env,env.DB,orderId,origin,current);
+          if(done.paid)return json({...done,order_id:orderId});
+          if(current?.url)return json({ok:true,paid:false,url:current.url,order_id:orderId,charge_iqd:charge});
+        }catch{}
+      }
+      const link=await createWaylLink(env,{referenceId:orderId,total:charge,label:'WarshaTik '+orderId,webhookUrl:origin+'/api/webhooks/wayl',redirectionUrl:origin+'/checkout.html?wayl_order='+encodeURIComponent(orderId)});
+      await env.DB.prepare('UPDATE orders SET payment_reference=?,wayl_link_id=?,wayl_code=?,wayl_charge_iqd=? WHERE id=?').bind(String(link.id||link.code||''),String(link.id||''),String(link.code||''),charge,orderId).run();
+      return json({ok:true,paid:false,url:link.url,order_id:orderId,charge_iqd:charge});
+    }catch(e){return json({error:e.message||'Unable to start Wayl payment'},502)}
+  }
+
+  if(u.pathname==='/api/payments/wayl/status'&&req.method==='GET'){
+    try{
+      const raw=String(u.searchParams.get('order_id')||'').trim();
+      if(!raw)return json({error:'Missing order_id'},400);
+      let order=await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(raw).first();
+      if(!order)order=await env.DB.prepare('SELECT * FROM orders WHERE wayl_link_id=? OR wayl_code=? OR payment_reference=? ORDER BY created_at DESC LIMIT 1').bind(raw,raw,raw).first();
+      if(!order)return json({error:'Order not found'},404);
+      if(order.payment_status==='paid'){
+        if(!Number(order.delivery_email_sent||0))await sendPurchaseEmail(env,env.DB,order.id,origin);
+        return json({ok:true,paid:true,order_id:order.id});
+      }
+      const current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(order.id))).data;
+      const out=await finalizeWaylOrder(env,env.DB,order.id,origin,current);
+      return json({...out,order_id:order.id,wayl_status:current?.status||null},out.ok?200:400);
+    }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
+  }
+
+  if(u.pathname==='/api/consultations/payment-status'&&req.method==='GET'){
+    try{
+      const code=String(u.searchParams.get('code')||'').replace(/\D/g,'');
+      if(code.length!==10)return json({error:'Invalid ticket code'},400);
+      const t=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+      if(!t)return json({error:'Ticket not found'},404);
+      if(t.status==='paid'||t.status==='completed')return json({ok:true,paid:true,ticket:t});
+      const ref='CONS-'+code,current=(await waylRequest(env,'/api/v1/links/'+encodeURIComponent(ref))).data;
+      const out=await finalizeWaylConsultation(env,env.DB,code,current);
+      const updated=await env.DB.prepare('SELECT * FROM consultation_tickets WHERE code=?').bind(code).first();
+      return json({...out,ticket:updated,wayl_status:current?.status||null},out.ok?200:400);
+    }catch(e){return json({error:e.message||'Unable to check Wayl payment'},502)}
+  }
 
   if(u.pathname==='/api/storefront'&&req.method==='GET'){
     const cache=globalThis.caches?.default,cacheKey=new Request(u.origin+'/api/storefront-cache'),adminRequest=await isAdmin(req,env,env.DB),fresh=u.searchParams.get('fresh')==='1';
