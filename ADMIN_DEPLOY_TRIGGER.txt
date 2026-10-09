@@ -1,1 +1,1 @@
-Trigger admin deployment for Wayl health diagnostics.
+Trigger admin deployment for Wayl integration health and current published fee calculator.
