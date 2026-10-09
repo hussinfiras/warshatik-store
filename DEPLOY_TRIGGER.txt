@@ -1,1 +1,1 @@
-Deploy Wayl checkout resume payment improvements, reuse existing pending link, and safe new order fallback.
+Deploy cached Wayl payment resume URLs, pending status fallback, and reliable new checkout navigation.
