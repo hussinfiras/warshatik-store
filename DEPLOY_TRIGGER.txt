@@ -1,1 +1,1 @@
-Trigger deployment for always-visible homepage category, product, and course cards.
+Trigger deployment for global visibility stability and restored homepage title/products.
