@@ -1,5 +1,6 @@
 (()=>{
-const API='https://warshatik-store2.hussainfiras23.workers.dev/api';
+const API_BASES=['https://warshatik.com/api','https://warshatik-store2.hussainfiras23.workers.dev/api'];
+const API=API_BASES[0];
 const $=s=>document.querySelector(s);
 const login=$('#adminLogin'),emailStep=$('#adminLoginEmailStep'),codeStep=$('#adminLoginCodeStep');
 const emailInput=$('#adminLoginEmail'),passwordInput=$('#adminLoginPassword'),codeInput=$('#adminLoginCode'),status=$('#adminLoginStatus');
@@ -24,16 +25,21 @@ async function call(path,opt={}){
   const headers={...(opt.headers||{})};
   if(opt.body&&!headers['content-type'])headers['content-type']='application/json';
   const token=getToken();if(token)headers['x-admin-key']=token;
-  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);
-  try{
-    const r=await fetch(API+path,{...opt,headers,signal:ctrl.signal});
-    let d={};try{d=await r.json()}catch{}
-    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
-    return d;
-  }catch(e){
-    if(e?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
-    throw e;
-  }finally{clearTimeout(timer)}
+  let lastErr=null;
+  for(const base of API_BASES){
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),7000);
+    try{
+      const r=await fetch(base+path,{...opt,headers,signal:ctrl.signal,cache:'no-store'});
+      let d={};try{d=await r.json()}catch{}
+      if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+      return d;
+    }catch(e){
+      lastErr=e;
+      if(e.message==='بيانات الدخول غير صحيحة.'||e.message==='رمز التحقق غير صحيح أو منتهي.'||e.message.startsWith('ADMIN_')||e.message.startsWith('محاولات كثيرة'))throw e;
+    }finally{clearTimeout(timer)}
+  }
+  if(lastErr?.name==='AbortError')throw new Error('انتهت مهلة الاتصال. حاول مرة أخرى.');
+  throw new Error(lastErr?.message||'تعذر الاتصال بالخادم');
 }
 function setStatus(msg,ok=false){if(status){status.textContent=msg||'';status.style.color=ok?'#147a4d':'#655d6d'}}
 function showLogin(){
