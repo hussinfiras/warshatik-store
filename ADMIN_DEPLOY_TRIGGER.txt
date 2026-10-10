@@ -1,1 +1,1 @@
-Deploy fast hardware COD order listing and clear timeout reporting.
+Deploy nonblocking cash payment confirmation and asynchronous hardware receipt email status.
