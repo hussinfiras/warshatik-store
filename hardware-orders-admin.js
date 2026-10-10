@@ -1,6 +1,19 @@
 (()=>{
 const section=document.getElementById('hardwareCodAdmin'),target=document.getElementById('hardwareOrdersTable'),refresh=document.getElementById('loadHardwareOrders'),search=document.getElementById('searchHardwareOrders');
 if(!section||!target||!refresh)return;
+// Keep the hardware view a direct child of main; malformed legacy section nesting can hide it.
+const main=document.querySelector('.app main');
+if(main&&section.parentElement!==main)main.appendChild(section);
+const nav=document.querySelector('.nav[data-view="hardwareCodAdmin"]');
+nav?.addEventListener('click',()=>{
+  requestAnimationFrame(()=>{
+    section.classList.add('active');
+    section.style.display='block';
+    section.style.visibility='visible';
+    if(!target.textContent.trim())load();
+  });
+});
+
 const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 async function hardwareApi(path,payload){
   const token=(()=>{try{return JSON.parse(localStorage.getItem('wt_settings')||'{}').adminKey||''}catch{return ''}})();
