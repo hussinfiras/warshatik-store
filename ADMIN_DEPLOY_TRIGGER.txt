@@ -1,1 +1,1 @@
-Deploy hardware order manager with searchable editable archivable records and correct resend email status.
+Deploy restored hardware management section markup inside Admin main view.
