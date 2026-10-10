@@ -1,1 +1,1 @@
-Deploy branded purchase emails with secure product downloads and explicit resend controls.
+Deploy hardware order manager with searchable editable archivable records and correct resend email status.
