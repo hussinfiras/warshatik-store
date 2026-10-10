@@ -729,6 +729,32 @@ export default{async fetch(req,env,ctx){
 
   if(!(await isAdmin(req,env,env.DB)))return json({error:'Unauthorized'},401);
 
+  if(u.pathname==='/api/admin/hardware-orders'&&req.method==='GET'){
+    try{
+      await ensureInit(env.DB);
+      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
+      return json({orders:results||[]});
+    }catch(e){console.error('admin hardware orders',e);return json({error:'تعذر تحميل طلبات الهاردوير'},500)}
+  }
+  if(u.pathname==='/api/admin/hardware-confirm-cash'&&req.method==='POST'){
+    try{
+      await ensureInit(env.DB);
+      const p=await req.json(),id=String(p.order_id||'').trim();
+      const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND payment_reference='CASH_ON_DELIVERY'").bind(id).first();
+      if(!order)return json({error:'طلب هاردوير غير موجود'},404);
+      if(!['cod_pending','paid'].includes(order.payment_status))return json({error:'حالة الطلب لا تسمح بالتأكيد'},409);
+      const delivery=await env.DB.prepare('SELECT * FROM hardware_delivery WHERE order_id=?').bind(id).first();
+      if(!delivery)return json({error:'بيانات التوصيل غير موجودة'},404);
+      if(order.payment_status==='cod_pending')await env.DB.prepare("UPDATE orders SET payment_status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='cod_pending'").bind(id).run();
+      const {results:items}=await env.DB.prepare('SELECT title,price FROM order_items WHERE order_id=?').bind(id).all();
+      const esc=x=>String(x||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+      const rows=(items||[]).map(x=>'<li>'+esc(x.title)+' — '+Number(x.price||0).toLocaleString('en-US')+' د.ع</li>').join('');
+      const html='<div dir="rtl" style="font-family:Arial,sans-serif"><h2>تأكيد شراء الهاردوير — ورشة تك</h2><p>تم استلام الدفع النقدي وتأكيد الطلب.</p><p>رقم الطلب: '+esc(id)+'</p><ul>'+rows+'</ul><p>الإجمالي: '+Number(order.total||0).toLocaleString('en-US')+' د.ع</p><p>المحافظة: '+esc(delivery.province)+'</p><p>العنوان: '+esc(delivery.address)+'</p><p>الهاتف: '+esc(delivery.phone)+'</p><p>رقم إضافي: '+esc(delivery.phone2||'—')+'</p><p>ملاحظات: '+esc(delivery.notes||'—')+'</p></div>';
+      const mail=await sendEmail(env,order.email,'تأكيد شراء الهاردوير - ورشة تك',html);
+      return json({ok:true,email_sent:!!mail.sent,email_reason:mail.reason||null});
+    }catch(e){console.error('hardware cash confirmation',e);return json({error:'تعذر تأكيد طلب الهاردوير'},500)}
+  }
+
   if(u.pathname==='/api/admin/settings'&&req.method==='GET'){
     return json({settings:await getSettings(env.DB)});
   }
