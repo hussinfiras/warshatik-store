@@ -1,1 +1,1 @@
-Deploy faster hardware COD order save: single catalog lookup and atomic batched DB writes before WhatsApp redirect.
+Deploy nonblocking cash payment confirmation and asynchronous hardware receipt email status.
