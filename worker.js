@@ -126,6 +126,10 @@ function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
 function randomToken(bytes=32){const a=new Uint8Array(bytes);crypto.getRandomValues(a);return [...a].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function random10DigitCode(){const a=new Uint32Array(1);crypto.getRandomValues(a);return String(1000000000+(a[0]%9000000000)).padStart(10,'0')}
 async function hashText(v){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function emailEscape(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
+function warshaEmailLayout(inner){
+  return '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="background:#f7f7fb;margin:0;padding:32px 12px;font-family:Tahoma,Arial,sans-serif;color:#231b30"><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:620px;margin:auto;background:#fff;border-radius:18px;overflow:hidden;border:1px solid #e9dff3"><tr><td style="background:#6c37ae;color:white;text-align:right;padding:26px 32px"><div style="font-size:25px;font-weight:800">ورشة تك <span style="color:#dbc0ff">✓</span></div><div style="font-size:12px;color:#e9dbff;margin-top:6px">WarshaTik • مشاريع إلكترونية</div></td></tr><tr><td style="padding:30px 32px;font-size:15px;line-height:1.95">'+inner+'</td></tr><tr><td style="background:#f5effc;padding:18px 32px;text-align:center;color:#655778;font-size:12px">ورشة تك — <a href="https://warshatik.com" style="color:#6c37ae">warshatik.com</a><div>هذه رسالة تلقائية بخصوص طلبك.</div></td></tr></table></body></html>';
+}
 async function sendEmail(env,to,subject,html){
   if(!env.RESEND_API_KEY)return {sent:false,reason:'RESEND_API_KEY missing in Cloudflare Worker'};
   if(!env.EMAIL_FROM)return {sent:false,reason:'EMAIL_FROM missing in Cloudflare Worker'};
@@ -135,14 +139,14 @@ async function sendEmail(env,to,subject,html){
     const r=await fetch('https://api.resend.com/emails',{
       method:'POST',
       headers:{authorization:'Bearer '+env.RESEND_API_KEY,'content-type':'application/json'},
-      body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html}),
+      body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html:warshaEmailLayout(html)}),
       signal:controller.signal
     });
     if(!r.ok){
       let detail='';try{const x=await r.json();detail=x.message||x.name||''}catch{}
       return {sent:false,reason:'Email HTTP '+r.status+(detail?': '+detail:'')};
     }
-    return {sent:true};
+    const accepted=await r.json().catch(()=>({}));return {sent:true,message_id:accepted.id||null};
   }catch(e){
     return {sent:false,reason:e&&e.name==='AbortError'?'Email provider timeout':'Email network error'};
   }finally{clearTimeout(timer)}
@@ -747,17 +751,25 @@ export default{async fetch(req,env,ctx){
       const delivery=await env.DB.prepare('SELECT * FROM hardware_delivery WHERE order_id=?').bind(id).first();
       if(!delivery)return json({error:'بيانات التوصيل غير موجودة'},404);
       if(order.payment_status==='cod_pending')await env.DB.prepare("UPDATE orders SET payment_status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='cod_pending'").bind(id).run();
-      const {results:items}=await env.DB.prepare('SELECT title,price FROM order_items WHERE order_id=?').bind(id).all();
-      const esc=x=>String(x||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-      const rows=(items||[]).map(x=>'<li>'+esc(x.title)+' — '+Number(x.price||0).toLocaleString('en-US')+' د.ع</li>').join('');
-      const html='<div dir="rtl" style="font-family:Arial,sans-serif"><h2>تأكيد شراء الهاردوير — ورشة تك</h2><p>تم استلام الدفع النقدي وتأكيد الطلب.</p><p>رقم الطلب: '+esc(id)+'</p><ul>'+rows+'</ul><p>الإجمالي: '+Number(order.total||0).toLocaleString('en-US')+' د.ع</p><p>المحافظة: '+esc(delivery.province)+'</p><p>العنوان: '+esc(delivery.address)+'</p><p>الهاتف: '+esc(delivery.phone)+'</p><p>رقم إضافي: '+esc(delivery.phone2||'—')+'</p><p>ملاحظات: '+esc(delivery.notes||'—')+'</p></div>';
+      const {results:items}=await env.DB.prepare('SELECT item_id,title,price FROM order_items WHERE order_id=?').bind(id).all();
+      const esc=emailEscape;
+      const rows=(items||[]).map(x=>'<li style="padding:6px 0">'+esc(x.title)+' — <strong>'+Number(x.price||0).toLocaleString('en-US')+' د.ع</strong></li>').join('');
       const latest=await env.DB.prepare('SELECT delivery_email_sent,delivery_email_last_error FROM orders WHERE id=?').bind(id).first();
-      if(Number(latest?.delivery_email_sent||0))return json({ok:true,paid:true,email_sent:true,already_sent:true});
-      const claim=await env.DB.prepare("UPDATE orders SET delivery_email_last_error='SENDING' WHERE id=? AND delivery_email_sent=0 AND COALESCE(delivery_email_last_error,'')<>'SENDING'").bind(id).run();
+      const forceResend=Boolean(p.resend);
+      if(Number(latest?.delivery_email_sent||0)&&!forceResend)return json({ok:true,paid:true,email_sent:true,already_sent:true});
+      const oldState=String(latest?.delivery_email_last_error||'');
+      if(oldState==='SENDING')return json({ok:true,paid:true,email_processing:true});
+      const claim=await env.DB.prepare("UPDATE orders SET delivery_email_last_error='SENDING' WHERE id=? AND COALESCE(delivery_email_last_error,'')<>'SENDING' AND (delivery_email_sent=0 OR ?=1)").bind(id,forceResend?1:0).run();
       if(!Number(claim.meta?.changes||0))return json({ok:true,paid:true,email_processing:true});
       ctx.waitUntil((async()=>{
         try{
-          const mail=await sendEmail(env,order.email,'تأكيد شراء الهاردوير - ورشة تك',html);
+          let downloads='';
+          for(const item of items||[]){
+            const links=await makeDownloadLinks(env,env.DB,id,item.item_id,origin);
+            if(links.length)downloads+='<div style="padding:14px 0;border-bottom:1px solid #eee"><strong>'+esc(item.title)+'</strong>'+links.map(l=>'<p><a href="'+l.url+'" style="display:inline-block;padding:10px 18px;background:#7443b6;color:#fff;border-radius:8px;text-decoration:none">تحميل '+esc(l.name)+'</a></p>').join('')+'</div>';
+          }
+          const html='<h2 style="color:#30203f;margin:0 0 12px">تم تأكيد استلام الدفع النقدي ✓</h2><p>شكراً لشرائك من ورشة تك. إليك تفاصيل طلبك:</p><p style="background:#f5effc;border-radius:9px;padding:12px">رقم الطلب: <strong>'+esc(id)+'</strong></p><ul>'+rows+'</ul><h3 style="color:#6c37ae">المجموع: '+Number(order.total||0).toLocaleString('en-US')+' د.ع</h3><h3>بيانات التوصيل</h3><p>المحافظة: '+esc(delivery.province)+'<br>العنوان: '+esc(delivery.address)+'<br>الهاتف: '+esc(delivery.phone)+'<br>هاتف إضافي: '+esc(delivery.phone2||'—')+'<br>ملاحظات: '+esc(delivery.notes||'—')+'</p>'+(downloads?'<h3 style="color:#6c37ae">ملفات المنتج</h3>'+downloads+'<p style="font-size:13px;color:#71677a">روابط التحميل صالحة لمدة ساعة، ويمكنك استرجاع ملفات مشترياتك لاحقاً.</p>':'<p style="color:#71677a">لا توجد ملفات رقمية مرفقة بهذا المنتج حالياً.</p>');
+          const mail=await sendEmail(env,order.email,'تأكيد الشراء وملفات المنتج - ورشة تك',html);
           await env.DB.prepare('UPDATE orders SET delivery_email_sent=?,delivery_email_last_error=? WHERE id=?')
             .bind(mail.sent?1:0,mail.sent?null:String(mail.reason||'فشل إرسال البريد').slice(0,300),id).run();
         }catch(e){
