@@ -546,6 +546,17 @@ export default{async fetch(req,env,ctx){
     }
   }
 
+  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
+    try{
+      await ensureInit(env.DB);
+      const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
+      if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
+      const t=await env.DB.prepare('SELECT code,customer_name,scheduled_date,consultation_type,amount_iqd,amount_usd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
+      if(!t)return json({error:'رمز التذكرة غير صحيح.'},404);
+      return json({ok:true,ticket:t});
+    }catch(e){console.error('consultation validation',e);return json({error:'تعذر التحقق من التذكرة حالياً.'},500)}
+  }
+
   if(u.pathname==='/api/consultations/payment-start'&&req.method==='POST'){
     try{
       if(!waylConfigured(env))return json({error:'Wayl is not configured yet'},503);
