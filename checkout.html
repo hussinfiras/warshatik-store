@@ -131,9 +131,9 @@ if(hardware.length){
   if(hardware.length!==checkoutItems.length){status.textContent='افصل منتجات الهاردوير عن المنتجات الرقمية أولاً.';return}
   if(!checkoutRegion.is_iraq){status.textContent='توصيل الهاردوير متاح داخل العراق فقط.';return}
   const province=document.getElementById('deliveryProvince').value.trim(),address=document.getElementById('deliveryAddress').value.trim(),phone=document.getElementById('deliveryPhone').value.trim(),phone2=document.getElementById('deliveryPhone2').value.trim(),notes=document.getElementById('deliveryNotes').value.trim();
-  if(!province||!address||!/^\\+?[0-9\\s-]{8,18}$/.test(phone)){status.textContent='أدخل المحافظة والعنوان ورقم هاتف صحيح.';return}
-  const items=hardware.map(x=>'- '+x.title+' (هاردوير) — '+checkoutMoney(x)).join('\\n');
-  const message=['مرحباً ورشة تك، أريد طلب باقة هاردوير.','',items,'','الاسم: '+name,'البريد: '+email,'المحافظة: '+province,'العنوان: '+address,'الهاتف: '+phone,phone2?'هاتف إضافي: '+phone2:'',notes?'ملاحظات: '+notes:'','يرجى تأكيد التوفر وكلفة التوصيل وطريقة الدفع.'].filter(Boolean).join('\\n');
+  if(!province||!address||!/^\+?[0-9\s-]{8,18}$/.test(phone)){status.textContent='أدخل المحافظة والعنوان ورقم هاتف صحيح.';return}
+  const items=hardware.map(x=>'- '+x.title+' (هاردوير) — '+checkoutMoney(x)).join('\n');
+  const message=['مرحباً ورشة تك، أريد طلب باقة هاردوير.','',items,'','الاسم: '+name,'البريد: '+email,'المحافظة: '+province,'العنوان: '+address,'الهاتف: '+phone,phone2?'هاتف إضافي: '+phone2:'',notes?'ملاحظات: '+notes:'','يرجى تأكيد التوفر وكلفة التوصيل وطريقة الدفع.'].filter(Boolean).join('\n');
   window.open('https://wa.me/9647867419185?text='+encodeURIComponent(message),'_blank','noopener');
   status.textContent='تم تجهيز الرسالة. أكمل إرسالها في WhatsApp لتأكيد طلبك. لم يتم إجراء أي دفع.';
   return;
