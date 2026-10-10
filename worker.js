@@ -731,7 +731,6 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/admin/hardware-orders'&&req.method==='GET'){
     try{
-      await ensureInit(env.DB);
       const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
       return json({orders:results||[]});
     }catch(e){console.error('admin hardware orders',e);return json({error:'تعذر تحميل طلبات الهاردوير'},500)}
