@@ -1,1 +1,1 @@
-Deploy authenticated Admin hardware COD endpoints and session-compatible order panel.
+Deploy fast hardware COD order listing and clear timeout reporting.
