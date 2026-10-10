@@ -1,1 +1,1 @@
-Deploy nonblocking cash payment confirmation and asynchronous hardware receipt email status.
+Deploy refreshed hardware receipt status display so Admin reflects background email processing.
