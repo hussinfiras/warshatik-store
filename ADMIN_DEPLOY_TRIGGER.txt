@@ -1,1 +1,1 @@
-Deploy refreshed hardware receipt status display so Admin reflects background email processing.
+Deploy branded purchase emails with secure product downloads and explicit resend controls.
