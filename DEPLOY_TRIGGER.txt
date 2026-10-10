@@ -1,1 +1,1 @@
-Deploy cash-on-delivery hardware order storage, WhatsApp checkout and ticket validation speed improvements.
+Deploy COD order email confirmation, WhatsApp delivery request, and faster public ticket validation.
