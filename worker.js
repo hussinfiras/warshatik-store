@@ -739,12 +739,14 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/admin/hardware-orders'&&req.method==='GET'){
     try{
+      await ensureInit(env.DB);
       const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes,o.delivery_email_sent,o.delivery_email_last_error,h.archived FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
       return json({orders:results||[]});
     }catch(e){console.error('admin hardware orders',e);return json({error:'تعذر تحميل طلبات الهاردوير'},500)}
   }
   if(u.pathname==='/api/admin/hardware-update'&&req.method==='POST'){
     try{
+      await ensureInit(env.DB);
       const p=await req.json(),id=String(p.order_id||'');
       const row=await env.DB.prepare("SELECT o.id,o.payment_status FROM orders o JOIN hardware_delivery h ON h.order_id=o.id WHERE o.id=? AND o.payment_reference='CASH_ON_DELIVERY' AND h.archived=0").bind(id).first();
       if(!row)return json({error:'الطلب غير موجود'},404);
@@ -758,6 +760,7 @@ export default{async fetch(req,env,ctx){
     }catch(e){console.error('hardware-update',e);return json({error:'تعذر تعديل الطلب'},500)}
   }
   if(u.pathname==='/api/admin/hardware-delete'&&req.method==='POST'){
+    await ensureInit(env.DB);
     const p=await req.json(),id=String(p.order_id||'');
     const row=await env.DB.prepare("SELECT o.id FROM orders o JOIN hardware_delivery h ON h.order_id=o.id WHERE o.id=? AND o.payment_reference='CASH_ON_DELIVERY'").bind(id).first();
     if(!row)return json({error:'الطلب غير موجود'},404);
