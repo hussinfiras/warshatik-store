@@ -5,13 +5,14 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function hardwareApi(path,payload){
   const token=(()=>{try{return JSON.parse(localStorage.getItem('wt_settings')||'{}').adminKey||''}catch{return ''}})();
   if(!token)throw new Error('يرجى تسجيل الدخول مجدداً إلى لوحة التحكم.');
-  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(new DOMException('Connection timed out','TimeoutError')),20000);
   try{
     const response=await fetch('https://warshatik.com/api'+path,{method:payload?'POST':'GET',headers:{'x-admin-key':token,...(payload?{'content-type':'application/json'}:{})},...(payload?{body:JSON.stringify(payload)}:{}),signal:controller.signal,cache:'no-store'});
     const data=await response.json();
     if(!response.ok)throw new Error(data.error||'HTTP '+response.status);
     return data;
-  }finally{clearTimeout(timeout)}
+  }catch(e){if(controller.signal.aborted)throw new Error('انتهت مهلة تحميل طلبات الهاردوير. تحقق من استجابة API في Cloudflare.');throw e}
+  finally{clearTimeout(timeout)}
 }
 async function load(){
   btn.disabled=true;target.textContent='جاري تحميل طلبات الهاردوير...';
