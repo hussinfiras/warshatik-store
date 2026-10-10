@@ -55,6 +55,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_code TEXT`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_charge_iqd INTEGER`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_url TEXT`)}catch{}
+  await db.exec(`CREATE TABLE IF NOT EXISTS hardware_delivery(order_id TEXT PRIMARY KEY,province TEXT NOT NULL,address TEXT NOT NULL,phone TEXT NOT NULL,phone2 TEXT,notes TEXT)`);
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_sent INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_last_error TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
@@ -547,9 +548,40 @@ export default{async fetch(req,env,ctx){
     }
   }
 
-  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
+  if(u.pathname==='/api/hardware-orders/create'&&req.method==='POST'){
     try{
       await ensureInit(env.DB);
+      const p=await req.json();
+      const name=String(p.name||'').trim(),email=normEmail(p.email);
+      const province=String(p.province||'').trim(),address=String(p.address||'').trim();
+      const phone=String(p.phone||'').trim(),phone2=String(p.phone2||'').trim(),notes=String(p.notes||'').trim();
+      if(name.length<2||!validEmail(email)||!province||!address||!/^[+]?[0-9\s-]{8,18}$/.test(phone))
+        return json({error:'أكمل الاسم والبريد والمحافظة والعنوان ورقم الهاتف.'},400);
+      const ids=[...new Set(Array.isArray(p.items)?p.items.map(String):[])];
+      if(!ids.length||ids.length>20)return json({error:'لا توجد منتجات هاردوير.'},400);
+      let total=0;const items=[];
+      for(const entry of ids){
+        const [id,pack]=entry.split('::');
+        if(pack!=='hardware')return json({error:'يجب فصل منتجات الهاردوير عن المنتجات الرقمية.'},400);
+        const it=await env.DB.prepare('SELECT id,title,type,active,status,package_enabled,hardware_price_iqd FROM items WHERE id=?').bind(id).first();
+        if(!it||!it.active||['sold','coming'].includes(it.status)||!it.package_enabled)return json({error:'أحد منتجات الهاردوير غير متاح.'},400);
+        const amount=it.status==='free'?0:Math.round(Number(it.hardware_price_iqd||0));
+        if(amount<0)return json({error:'السعر غير صالح.'},400);
+        total+=amount;items.push({...it,amount});
+      }
+      const orderId='HW-'+crypto.randomUUID();
+      await env.DB.prepare("INSERT INTO orders(id,email,customer_name,currency,total,payment_status,payment_reference) VALUES(?,?,?,?,?,'cod_pending','CASH_ON_DELIVERY')")
+       .bind(orderId,email,name,'IQD',total).run();
+      for(const item of items)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price,package_type) VALUES(?,?,?,?,?)')
+        .bind(orderId,item.id,item.title+' — هاردوير',item.amount,'hardware').run();
+      await env.DB.prepare('INSERT INTO hardware_delivery(order_id,province,address,phone,phone2,notes) VALUES(?,?,?,?,?,?)')
+        .bind(orderId,province,address,phone,phone2,notes).run();
+      return json({ok:true,order_id:orderId,total_iqd:total});
+    }catch(e){console.error('hardware order creation',e);return json({error:'تعذر تسجيل طلب الهاردوير.'},500)}
+  }
+
+  if(u.pathname==='/api/consultations/validate'&&req.method==='POST'){
+    try{
       const b=await req.json(),code=String(b.code||'').replace(/\D/g,'');
       if(code.length!==10)return json({error:'رمز التذكرة يجب أن يتكون من 10 أرقام.'},400);
       const t=await env.DB.prepare('SELECT code,customer_name,scheduled_date,consultation_type,amount_iqd,amount_usd,status,paid_at FROM consultation_tickets WHERE code=?').bind(code).first();
@@ -627,6 +659,24 @@ export default{async fetch(req,env,ctx){
     }
     if(b.action==='reset-stats'){
       const now=new Date().toISOString();await putSettings(env.DB,{stats_reset_at:now});return json({ok:true,reset_at:now});
+    }
+    if(b.action==='hardware-orders'){
+      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
+      return json({orders:results});
+    }
+    if(b.action==='hardware-confirm-cash'){
+      const id=String(b.payload?.order_id||'');
+      const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND payment_reference='CASH_ON_DELIVERY'").bind(id).first();
+      if(!order)return json({error:'طلب هاردوير غير موجود'},404);
+      if(order.payment_status!=='cod_pending'&&order.payment_status!=='paid')return json({error:'حالة الطلب لا تسمح بتأكيد الدفع'},409);
+      if(order.payment_status==='cod_pending')await env.DB.prepare("UPDATE orders SET payment_status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='cod_pending'").bind(id).run();
+      const d=await env.DB.prepare('SELECT * FROM hardware_delivery WHERE order_id=?').bind(id).first();
+      const {results:items}=await env.DB.prepare('SELECT title,price FROM order_items WHERE order_id=?').bind(id).all();
+      const esc=x=>String(x||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+      const rows=items.map(x=>'<li>'+esc(x.title)+' — '+Number(x.price||0).toLocaleString('en-US')+' د.ع</li>').join('');
+      const html='<div dir="rtl" style="font-family:Arial,sans-serif"><h2>تأكيد شراء الهاردوير — ورشة تك</h2><p>تم استلام الدفع النقدي وتأكيد طلبك.</p><p>رقم الطلب: <b>'+esc(id)+'</b></p><ul>'+rows+'</ul><p>المجموع: '+Number(order.total||0).toLocaleString('en-US')+' د.ع</p><h3>بيانات التوصيل</h3><p>المحافظة: '+esc(d.province)+'</p><p>العنوان: '+esc(d.address)+'</p><p>الهاتف: '+esc(d.phone)+'</p><p>رقم إضافي: '+esc(d.phone2||'—')+'</p><p>ملاحظات: '+esc(d.notes||'—')+'</p></div>';
+      const mail=await sendEmail(env,order.email,'تأكيد شراء الهاردوير - ورشة تك',html);
+      return json({ok:true,email_sent:!!mail.sent,email_reason:mail.reason||null});
     }
     if(b.action==='customers'){
       const q=String(b.payload?.q||'').trim().toLowerCase(),like='%'+q+'%';
