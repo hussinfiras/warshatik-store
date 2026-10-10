@@ -56,6 +56,7 @@ async function init(db){
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_charge_iqd INTEGER`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN wayl_url TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS hardware_delivery(order_id TEXT PRIMARY KEY,province TEXT NOT NULL,address TEXT NOT NULL,phone TEXT NOT NULL,phone2 TEXT,notes TEXT)`);
+  try{await db.exec(`ALTER TABLE hardware_delivery ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_sent INTEGER NOT NULL DEFAULT 0`)}catch{}
   try{await db.exec(`ALTER TABLE orders ADD COLUMN delivery_email_last_error TEXT`)}catch{}
   await db.exec(`CREATE TABLE IF NOT EXISTS order_items(order_id TEXT NOT NULL,item_id TEXT NOT NULL,title TEXT NOT NULL,price REAL NOT NULL,PRIMARY KEY(order_id,item_id));`);
@@ -668,7 +669,7 @@ export default{async fetch(req,env,ctx){
       const now=new Date().toISOString();await putSettings(env.DB,{stats_reset_at:now});return json({ok:true,reset_at:now});
     }
     if(b.action==='hardware-orders'){
-      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes,o.delivery_email_sent,o.delivery_email_last_error FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
+      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes,o.delivery_email_sent,o.delivery_email_last_error FROM orders o JOIN hardware_delivery h ON h.order_id=o.id WHERE COALESCE(h.archived,0)=0 ORDER BY o.created_at DESC LIMIT 500").all();
       return json({orders:results});
     }
     if(b.action==='hardware-confirm-cash'){
@@ -738,9 +739,30 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/admin/hardware-orders'&&req.method==='GET'){
     try{
-      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
+      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes,o.delivery_email_sent,o.delivery_email_last_error,h.archived FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
       return json({orders:results||[]});
     }catch(e){console.error('admin hardware orders',e);return json({error:'تعذر تحميل طلبات الهاردوير'},500)}
+  }
+  if(u.pathname==='/api/admin/hardware-update'&&req.method==='POST'){
+    try{
+      const p=await req.json(),id=String(p.order_id||'');
+      const row=await env.DB.prepare("SELECT o.id,o.payment_status FROM orders o JOIN hardware_delivery h ON h.order_id=o.id WHERE o.id=? AND o.payment_reference='CASH_ON_DELIVERY' AND h.archived=0").bind(id).first();
+      if(!row)return json({error:'الطلب غير موجود'},404);
+      const name=String(p.name||'').trim(),email=normEmail(p.email),province=String(p.province||'').trim(),address=String(p.address||'').trim(),phone=String(p.phone||'').trim(),phone2=String(p.phone2||'').trim(),notes=String(p.notes||'').trim();
+      if(name.length<2||!validEmail(email)||!province||!address||!/^[+]?\d[\d\s-]{7,17}$/.test(phone))return json({error:'يرجى إكمال البيانات بشكل صحيح'},400);
+      await env.DB.batch([
+        env.DB.prepare("UPDATE orders SET customer_name=?,email=? WHERE id=?").bind(name,email,id),
+        env.DB.prepare("UPDATE hardware_delivery SET province=?,address=?,phone=?,phone2=?,notes=? WHERE order_id=?").bind(province,address,phone,phone2,notes,id)
+      ]);
+      return json({ok:true});
+    }catch(e){console.error('hardware-update',e);return json({error:'تعذر تعديل الطلب'},500)}
+  }
+  if(u.pathname==='/api/admin/hardware-delete'&&req.method==='POST'){
+    const p=await req.json(),id=String(p.order_id||'');
+    const row=await env.DB.prepare("SELECT o.id FROM orders o JOIN hardware_delivery h ON h.order_id=o.id WHERE o.id=? AND o.payment_reference='CASH_ON_DELIVERY'").bind(id).first();
+    if(!row)return json({error:'الطلب غير موجود'},404);
+    await env.DB.prepare('UPDATE hardware_delivery SET archived=1 WHERE order_id=?').bind(id).run();
+    return json({ok:true,archived:true});
   }
   if(u.pathname==='/api/admin/hardware-confirm-cash'&&req.method==='POST'){
     try{
