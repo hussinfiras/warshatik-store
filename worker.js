@@ -550,7 +550,6 @@ export default{async fetch(req,env,ctx){
 
   if(u.pathname==='/api/hardware-orders/create'&&req.method==='POST'){
     try{
-      await ensureInit(env.DB);
       const p=await req.json();
       const name=String(p.name||'').trim(),email=normEmail(p.email);
       const province=String(p.province||'').trim(),address=String(p.address||'').trim();
@@ -559,23 +558,27 @@ export default{async fetch(req,env,ctx){
         return json({error:'أكمل الاسم والبريد والمحافظة والعنوان ورقم الهاتف.'},400);
       const ids=[...new Set(Array.isArray(p.items)?p.items.map(String):[])];
       if(!ids.length||ids.length>20)return json({error:'لا توجد منتجات هاردوير.'},400);
+      const requested=ids.map(entry=>entry.split('::'));
+      if(requested.some(([id,pack])=>!id||pack!=='hardware'))return json({error:'يجب فصل منتجات الهاردوير عن المنتجات الرقمية.'},400);
+      const keys=requested.map(([id])=>id);
+      const placeholders=keys.map(()=>' ? ').join(',');
+      const found=await env.DB.prepare('SELECT id,title,type,active,status,package_enabled,hardware_price_iqd FROM items WHERE id IN ('+placeholders+')').bind(...keys).all();
+      const byId=new Map((found.results||[]).map(x=>[x.id,x]));
       let total=0;const items=[];
-      for(const entry of ids){
-        const [id,pack]=entry.split('::');
-        if(pack!=='hardware')return json({error:'يجب فصل منتجات الهاردوير عن المنتجات الرقمية.'},400);
-        const it=await env.DB.prepare('SELECT id,title,type,active,status,package_enabled,hardware_price_iqd FROM items WHERE id=?').bind(id).first();
+      for(const [id] of requested){
+        const it=byId.get(id);
         if(!it||!it.active||['sold','coming'].includes(it.status)||!it.package_enabled)return json({error:'أحد منتجات الهاردوير غير متاح.'},400);
         const amount=it.status==='free'?0:Math.round(Number(it.hardware_price_iqd||0));
-        if(amount<0)return json({error:'السعر غير صالح.'},400);
+        if(!Number.isFinite(amount)||amount<0)return json({error:'السعر غير صالح.'},400);
         total+=amount;items.push({...it,amount});
       }
       const orderId='HW-'+crypto.randomUUID();
-      await env.DB.prepare("INSERT INTO orders(id,email,customer_name,currency,total,payment_status,payment_reference) VALUES(?,?,?,?,?,'cod_pending','CASH_ON_DELIVERY')")
-       .bind(orderId,email,name,'IQD',total).run();
-      for(const item of items)await env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price,package_type) VALUES(?,?,?,?,?)')
-        .bind(orderId,item.id,item.title+' — هاردوير',item.amount,'hardware').run();
-      await env.DB.prepare('INSERT INTO hardware_delivery(order_id,province,address,phone,phone2,notes) VALUES(?,?,?,?,?,?)')
-        .bind(orderId,province,address,phone,phone2,notes).run();
+      const inserts=[
+        env.DB.prepare("INSERT INTO orders(id,email,customer_name,currency,total,payment_status,payment_reference) VALUES(?,?,?,?,?,'cod_pending','CASH_ON_DELIVERY')").bind(orderId,email,name,'IQD',total),
+        ...items.map(item=>env.DB.prepare('INSERT INTO order_items(order_id,item_id,title,price,package_type) VALUES(?,?,?,?,?)').bind(orderId,item.id,item.title+' — هاردوير',item.amount,'hardware')),
+        env.DB.prepare('INSERT INTO hardware_delivery(order_id,province,address,phone,phone2,notes) VALUES(?,?,?,?,?,?)').bind(orderId,province,address,phone,phone2,notes)
+      ];
+      await env.DB.batch(inserts);
       return json({ok:true,order_id:orderId,total_iqd:total});
     }catch(e){console.error('hardware order creation',e);return json({error:'تعذر تسجيل طلب الهاردوير.'},500)}
   }
