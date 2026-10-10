@@ -1,1 +1,1 @@
-Deploy hardware cash-on-delivery order table and manual cash receipt confirmation email.
+Deploy authenticated Admin hardware COD endpoints and session-compatible order panel.
