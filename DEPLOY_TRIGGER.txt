@@ -1,1 +1,1 @@
-Deploy fast hardware COD order listing and clear timeout reporting.
+Deploy faster hardware COD order save: single catalog lookup and atomic batched DB writes before WhatsApp redirect.
