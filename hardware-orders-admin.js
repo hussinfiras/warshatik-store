@@ -18,19 +18,19 @@ async function load(){
   btn.disabled=true;target.textContent='جاري تحميل طلبات الهاردوير...';
   try{
     const d=await hardwareApi('/admin/hardware-orders');
-    target.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th>رقم الطلب</th><th>الاسم والبريد</th><th>التوصيل</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>'+((d.orders||[]).map(o=>'<tr><td>'+esc(o.id)+'</td><td>'+esc(o.customer_name)+'<div>'+esc(o.email)+'</div></td><td>'+esc(o.province)+'، '+esc(o.address)+'<div>'+esc(o.phone)+'</div></td><td>'+Number(o.total||0).toLocaleString('en-US')+' د.ع</td><td>'+esc(o.payment_status)+'</td><td>'+(o.payment_status==='cod_pending'?'<button type="button" data-confirm-cod="'+esc(o.id)+'">تأكيد استلام النقد وإرسال الإيصال</button>':'مدفوع')+'</td></tr>').join('')||'<tr><td colspan="6">لا توجد طلبات هاردوير بعد.</td></tr>')+'</tbody></table>';
+    target.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th>رقم الطلب</th><th>الاسم والبريد</th><th>التوصيل</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>'+((d.orders||[]).map(o=>'<tr><td>'+esc(o.id)+'</td><td>'+esc(o.customer_name)+'<div>'+esc(o.email)+'</div></td><td>'+esc(o.province)+'، '+esc(o.address)+'<div>'+esc(o.phone)+'</div></td><td>'+Number(o.total||0).toLocaleString('en-US')+' د.ع</td><td>'+esc(o.payment_status)+'</td><td>'+(o.payment_status==='cod_pending'?'<button type="button" data-confirm-cod="'+esc(o.id)+'">تأكيد استلام النقد وإرسال الإيصال</button>':o.delivery_email_sent?'مدفوع — تم إرسال الإيصال ✓':o.delivery_email_last_error==='SENDING'?'مدفوع — جاري إرسال البريد': '<button type="button" data-confirm-cod="'+esc(o.id)+'">إعادة إرسال الإيصال</button>')+'</td></tr>').join('')||'<tr><td colspan="6">لا توجد طلبات هاردوير بعد.</td></tr>')+'</tbody></table>';
   }catch(e){target.textContent='تعذر تحميل الطلبات: '+e.message}
   finally{btn.disabled=false}
 }
 btn.onclick=load;
 target.addEventListener('click',async event=>{
   const b=event.target.closest('[data-confirm-cod]');if(!b)return;
-  if(!confirm('هل استلمت المبلغ نقداً بالفعل؟ سيتم تسجيل الطلب كمدفوع وإرسال إيصال إلى البريد.'))return;
+  if(b.textContent.includes('تأكيد استلام')&&!confirm('هل استلمت المبلغ نقداً بالفعل؟ سيتم تسجيل الطلب كمدفوع وإرسال إيصال إلى البريد.'))return;
   b.disabled=true;
   try{
     const d=await hardwareApi('/admin/hardware-confirm-cash',{order_id:b.dataset.confirmCod});
-    alert(d.email_sent?'تم تأكيد الدفع وإرسال رسالة التأكيد.':'تم تأكيد استلام النقد ولكن فشل البريد: '+(d.email_reason||'تحقق من إعدادات البريد'));
+    alert(d.email_sent?'الدفع مؤكد والإيصال مرسل.':d.email_processing?'تم تسجيل استلام المبلغ. يجري إرسال الإيصال بالبريد، ويمكنك تحديث القائمة بعد قليل.':'تم حفظ حالة الطلب.');
     await load();
-  }catch(e){alert(e.message);b.disabled=false}
+  }catch(e){alert(e.name==='AbortError'?'انتهت مهلة الاتصال؛ حدّث قائمة الطلبات قبل إعادة المحاولة.':e.message);b.disabled=false}
 });
 })();
