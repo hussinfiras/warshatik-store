@@ -1,1 +1,1 @@
-Deploy restored hardware management section markup inside Admin main view.
+Deploy hardware Admin view visibility fix and automatic order loading on navigation.
