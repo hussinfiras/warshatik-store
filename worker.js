@@ -664,7 +664,7 @@ export default{async fetch(req,env,ctx){
       const now=new Date().toISOString();await putSettings(env.DB,{stats_reset_at:now});return json({ok:true,reset_at:now});
     }
     if(b.action==='hardware-orders'){
-      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
+      const {results}=await env.DB.prepare("SELECT o.id,o.email,o.customer_name,o.total,o.payment_status,o.created_at,h.province,h.address,h.phone,h.phone2,h.notes,o.delivery_email_sent,o.delivery_email_last_error FROM orders o JOIN hardware_delivery h ON h.order_id=o.id ORDER BY o.created_at DESC LIMIT 200").all();
       return json({orders:results});
     }
     if(b.action==='hardware-confirm-cash'){
@@ -740,7 +740,6 @@ export default{async fetch(req,env,ctx){
   }
   if(u.pathname==='/api/admin/hardware-confirm-cash'&&req.method==='POST'){
     try{
-      await ensureInit(env.DB);
       const p=await req.json(),id=String(p.order_id||'').trim();
       const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND payment_reference='CASH_ON_DELIVERY'").bind(id).first();
       if(!order)return json({error:'طلب هاردوير غير موجود'},404);
@@ -752,8 +751,22 @@ export default{async fetch(req,env,ctx){
       const esc=x=>String(x||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
       const rows=(items||[]).map(x=>'<li>'+esc(x.title)+' — '+Number(x.price||0).toLocaleString('en-US')+' د.ع</li>').join('');
       const html='<div dir="rtl" style="font-family:Arial,sans-serif"><h2>تأكيد شراء الهاردوير — ورشة تك</h2><p>تم استلام الدفع النقدي وتأكيد الطلب.</p><p>رقم الطلب: '+esc(id)+'</p><ul>'+rows+'</ul><p>الإجمالي: '+Number(order.total||0).toLocaleString('en-US')+' د.ع</p><p>المحافظة: '+esc(delivery.province)+'</p><p>العنوان: '+esc(delivery.address)+'</p><p>الهاتف: '+esc(delivery.phone)+'</p><p>رقم إضافي: '+esc(delivery.phone2||'—')+'</p><p>ملاحظات: '+esc(delivery.notes||'—')+'</p></div>';
-      const mail=await sendEmail(env,order.email,'تأكيد شراء الهاردوير - ورشة تك',html);
-      return json({ok:true,email_sent:!!mail.sent,email_reason:mail.reason||null});
+      const latest=await env.DB.prepare('SELECT delivery_email_sent,delivery_email_last_error FROM orders WHERE id=?').bind(id).first();
+      if(Number(latest?.delivery_email_sent||0))return json({ok:true,paid:true,email_sent:true,already_sent:true});
+      const claim=await env.DB.prepare("UPDATE orders SET delivery_email_last_error='SENDING' WHERE id=? AND delivery_email_sent=0 AND COALESCE(delivery_email_last_error,'')<>'SENDING'").bind(id).run();
+      if(!Number(claim.meta?.changes||0))return json({ok:true,paid:true,email_processing:true});
+      ctx.waitUntil((async()=>{
+        try{
+          const mail=await sendEmail(env,order.email,'تأكيد شراء الهاردوير - ورشة تك',html);
+          await env.DB.prepare('UPDATE orders SET delivery_email_sent=?,delivery_email_last_error=? WHERE id=?')
+            .bind(mail.sent?1:0,mail.sent?null:String(mail.reason||'فشل إرسال البريد').slice(0,300),id).run();
+        }catch(e){
+          console.error('Hardware COD email failed',e);
+          await env.DB.prepare('UPDATE orders SET delivery_email_last_error=? WHERE id=?')
+            .bind(String(e.message||e).slice(0,300),id).run();
+        }
+      })());
+      return json({ok:true,paid:true,email_processing:true});
     }catch(e){console.error('hardware cash confirmation',e);return json({error:'تعذر تأكيد طلب الهاردوير'},500)}
   }
 
