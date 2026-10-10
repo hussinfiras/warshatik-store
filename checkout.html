@@ -138,7 +138,7 @@ if(hardware.length){
   try{created=await apiJson('/api/hardware-orders/create',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,email,province,address,phone,phone2,notes,items:hardware.map(x=>x.cartEntry)})})}
   catch(e){status.textContent='❌ '+e.message;return}
   const message=['مرحباً ورشة تك، أريد تأكيد طلب الهاردوير.','رقم الطلب: '+created.order_id,'',items,'','الاسم: '+name,'البريد: '+email,'المحافظة: '+province,'العنوان: '+address,'الهاتف: '+phone,phone2?'هاتف إضافي: '+phone2:'',notes?'ملاحظات: '+notes:'','المبلغ: '+Number(created.total_iqd).toLocaleString('en-US')+' د.ع','طريقة الدفع: نقداً عند الاستلام','يرجى تأكيد التوفر وموعد التوصيل.'].filter(Boolean).join('\n');
-  window.open('https://wa.me/9647867419185?text='+encodeURIComponent(message),'_blank','noopener');
+  location.assign('https://wa.me/9647867419185?text='+encodeURIComponent(message));
   status.textContent='تم تسجيل طلبك برقم '+created.order_id+'. أرسل الرسالة عبر WhatsApp لتأكيد التوصيل. ستصلك رسالة بريد بعد تأكيد استلام المبلغ النقدي.';
   return;
 }
