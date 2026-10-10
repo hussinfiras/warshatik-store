@@ -1,1 +1,1 @@
-Deploy COD order email confirmation, WhatsApp delivery request, and faster public ticket validation.
+Deploy authenticated Admin hardware COD endpoints and session-compatible order panel.
