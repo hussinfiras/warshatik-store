@@ -1,1 +1,1 @@
-Deploy nonblocking cash payment confirmation and asynchronous hardware receipt email status.
+Deploy branded purchase emails with secure product downloads and explicit resend controls.
